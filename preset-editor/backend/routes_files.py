@@ -1,4 +1,5 @@
 import asyncio
+import os
 import shutil
 import tempfile
 from collections import Counter
@@ -125,6 +126,28 @@ def _drop_mode(preset_dir: Path, text: str, mode: str) -> None:
     (preset_dir / files.MANIFEST).write_text(files.remove_mode_from_manifest(text, mode), encoding="utf-8")
 
 
+def _prefixes(folder: Path) -> List[str]:
+    found = set()
+    for candidate in (folder, folder.resolve()):
+        found.update((str(candidate), candidate.as_posix()))
+        try:
+            relative = Path(os.path.relpath(candidate))
+        except ValueError:
+            continue
+        found.update((str(relative), relative.as_posix()))
+    return sorted((item for item in found if item not in ("", ".")), key=len, reverse=True)
+
+
+def _inside(messages: List[str], folder: Path) -> List[str]:
+    prefixes = [prefix + separator for prefix in _prefixes(folder) for separator in ("/", "\\")]
+    out = []
+    for message in messages:
+        for prefix in prefixes:
+            message = message.replace(prefix, "")
+        out.append(message)
+    return out
+
+
 def _added(before: List[str], after: List[str]) -> List[str]:
     left = Counter(before)
     found = []
@@ -154,8 +177,8 @@ async def mode_removal(draft_id: str, mode: str):
         "allowed": True,
         "message": "",
         "citing": [],
-        "errors": _added(errors, errors_after),
-        "warnings": _added(warnings, warnings_after),
+        "errors": _added(_inside(errors, draft.dir), _inside(errors_after, copy)),
+        "warnings": _added(_inside(warnings, draft.dir), _inside(warnings_after, copy)),
     })
 
 

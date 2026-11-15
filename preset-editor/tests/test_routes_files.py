@@ -259,10 +259,11 @@ def _lint_by_modes(core):
         core.lint_calls.append(Path(path))
         manifest = (Path(path) / "preset.yml").read_text(encoding="utf-8")
         listed = "- img2img" in manifest
+        where = Path(path).as_posix() if len(core.lint_calls) % 2 else str(Path(path))
         errors = [] if listed or "simple_modes: [img2img]" not in manifest else [
-            "[ERROR] preset.yml: vars.video_director.simple_modes.img2img: not a mode of this preset"
+            f"[ERROR] {where}/preset.yml: vars.video_director.simple_modes.img2img: not a mode of this preset"
         ]
-        return errors, ["[WARNING] preset.yml: no tests.yml"]
+        return errors, [f"[WARNING] {where}/preset.yml: no tests.yml", "[WARNING] preset.yml: no cover"]
 
     return lint_async
 

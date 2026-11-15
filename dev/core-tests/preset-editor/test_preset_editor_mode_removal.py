@@ -88,6 +88,7 @@ def test_the_removal_check_names_what_the_core_lint_reports_once_the_mode_is_gon
     data = check.json()["data"]
     assert data["allowed"] is True
     assert [error for error in data["errors"] if named in error], data["errors"]
+    assert [issue for issue in data["errors"] + data["warnings"] if draft.draft_id in issue] == []
     assert _tree(draft.dir) == before
 
 
