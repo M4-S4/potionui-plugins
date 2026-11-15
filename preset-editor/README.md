@@ -56,9 +56,9 @@ The details of each version are in [docs/development.md](https://github.com/M4-S
 ### What changed in 0.2.6
 
 - The pipeline builder also reports a `pipeline_from:` that names a mode which is itself a pointer, or whose `pipeline.yml` does not parse.
-- A file that another file of the draft still names, by `pipeline_from:` or by a `{{ paths.preset }}` path, cannot be deleted; the refusal names those files.
+- A file that another file of the draft still names, by `pipeline_from:` or by a `{{ paths.preset }}` path, cannot be deleted; the refusal comes before the confirmation and names those files.
 - Removing a mode first shows the lint errors the removal would leave.
-- On a PotionUI it cannot tell how to keep closed to API keys, Preset Editor does not start.
+- On a PotionUI whose API keys it cannot keep out, Preset Editor refuses every request and asks to be updated.
 
 ### What changed in 0.2.5
 
