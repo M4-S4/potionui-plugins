@@ -20,7 +20,7 @@ If its **Overview** tab then shows a **Setup** section, follow its steps, and re
 | Plugin | What it does | Who uses it | Needs on the server | Version |
 |---|---|---|---|---|
 | [Video Producer](video-producer/README.md) | A page for making short films with AI video: write a synopsis, split it into shots, generate takes, pick the best ones, then edit, match colors, mix the sound and export the film. [User guide](video-producer/docs/user-guide.md). | Every user; an admin sets it up. | A video engine, video presets and their model files, and ffmpeg: its [administration page](video-producer/README.md) says what to prepare. | 0.6.0 |
-| [Preset Editor](preset-editor/README.md) | Create, edit, check and publish presets without leaving PotionUI. | Admins only. | Nothing else. | 0.2.5 |
+| [Preset Editor](preset-editor/README.md) | Create, edit, check and publish presets without leaving PotionUI. | Admins only. | Nothing else. | 0.2.6 |
 | [Media Converter](media-convert/README.md) | Adds four tools to the Tools menu of the Library and the History: convert an image to PNG, JPEG or WebP, a video to MP4, MOV or WebM, or a sound to WAV, MP3, FLAC, M4A or OGG, and extract the sound of a video. | Every user. | ffmpeg and ffprobe, which the PotionUI image ships. | 0.1.1 |
 
 The README of Preset Editor and of Media Converter lists the changes of each version, newest first.
@@ -39,7 +39,7 @@ If PotionUI refuses an update with the message that the new version did not star
 3. update it;
 4. enable it.
 
-Preset Editor 0.2.4 needs these steps to reach 0.2.5, and Media Converter 0.1.0 to reach 0.1.1.
+Use these steps for every update of Preset Editor, and to take Media Converter from 0.1.0 to 0.1.1.
 
 ## Install by hand
 

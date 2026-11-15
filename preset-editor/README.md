@@ -5,7 +5,7 @@ Create, edit, check and publish presets without leaving PotionUI, for admins onl
 https://raw.githubusercontent.com/M4-S4/potionui-plugins/main/plugins.json
 ```
 
-Version 0.2.5. It runs on PotionUI 0.1.0 or later; the catalogue needs PotionUI 0.2.0 or later, whose **Admin › Plugins** page shows **Install from catalog**.
+Version 0.2.6. It runs on PotionUI 0.1.0 or later; the catalogue needs PotionUI 0.2.0 or later, whose **Admin › Plugins** page shows **Install from catalog**.
 
 1. In **Admin › Plugins**, click **Install from catalog**, paste the catalogue URL and click **Read catalog**.
 2. Click **Install** next to **Preset Editor**, then **Install** in the window that asks to confirm. It arrives in the list, disabled.
@@ -13,7 +13,7 @@ Version 0.2.5. It runs on PotionUI 0.1.0 or later; the catalogue needs PotionUI 
 
 Without the catalogue, on PotionUI 0.1.0 for example, install it by hand from its release zip, as the [README of the repository](https://github.com/M4-S4/potionui-plugins#install-by-hand) says.
 
-To update from 0.2.4 to 0.2.5, disable Preset Editor in **Admin › Plugins**, restart PotionUI, update it from the catalogue, then enable it. An update started while 0.2.4 is enabled is refused with the message that 0.2.5 did not start, and 0.2.4 stays in place; restarting and updating again gives the same refusal.
+To update from an earlier version, disable Preset Editor in **Admin › Plugins**, restart PotionUI, update it from the catalogue, then enable it. An update made while Preset Editor is enabled may be refused, or may take full effect only once PotionUI restarts.
 
 ![The draft workbench of a copy of the Flux2 preset in the dark theme: the files of the preset on the left, and the form builder open on the form of the txt2img mode, with its tabs, the field palette and the inspector of the selected node](https://raw.githubusercontent.com/M4-S4/potionui-plugins/main/preset-editor/docs/screenshots/form-builder-dark.webp)
 
@@ -52,6 +52,13 @@ The [reference](docs/reference.md#limits-worth-knowing) lists them all. What is 
 ## Changes
 
 The details of each version are in [docs/development.md](https://github.com/M4-S4/potionui-plugins/blob/main/preset-editor/docs/development.md#changes-in-detail).
+
+### What changed in 0.2.6
+
+- The pipeline builder also reports a `pipeline_from:` that names a mode which is itself a pointer, or whose `pipeline.yml` does not parse.
+- A file that another file of the draft still names, by `pipeline_from:` or by a `{{ paths.preset }}` path, cannot be deleted; the refusal comes before the confirmation and names those files.
+- Removing a mode first shows the lint errors the removal would leave.
+- On a PotionUI whose API keys it cannot keep out, Preset Editor refuses every request and asks to be updated.
 
 ### What changed in 0.2.5
 

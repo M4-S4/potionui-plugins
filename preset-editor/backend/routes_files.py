@@ -1,13 +1,18 @@
 import asyncio
+import os
+import re
 import shutil
-from typing import Optional
+import tempfile
+from collections import Counter
+from pathlib import Path
+from typing import List, Optional
 
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends, Header, Query
 
 from src.plugin_api import get_current_admin_user
 from src.plugin_api.cloud import CLOUD_BLOCKS
 
-from . import core_bridge, drafts, files, paths, scaffold
+from . import core_bridge, drafts, files, paths, publish, scaffold
 from .drafts import DraftError
 from .files import FilesError
 from .routes_common import error, ok
@@ -24,6 +29,7 @@ STATUS_BY_CODE = {
     "not_found": 404,
     "precondition_required": 428,
     "precondition_failed": 412,
+    "conflict": 409,
 }
 
 
@@ -64,11 +70,20 @@ async def write_file(draft_id: str, path: str, body: FileWrite, if_match: Option
     return ok({**written, "lint": await _lint(draft)})
 
 
+@router.get("/drafts/{draft_id}/deletion")
+async def file_deletion(draft_id: str, path: str = Query(...)):
+    draft = _load(draft_id)
+    try:
+        return ok(await asyncio.to_thread(files.deletion_check, draft.dir, path))
+    except FilesError as failure:
+        raise _files_error(failure)
+
+
 @router.delete("/drafts/{draft_id}/files/{path:path}")
 async def delete_file(draft_id: str, path: str):
     draft = _load(draft_id)
     try:
-        removed = files.delete_file(draft.dir, path)
+        removed = await asyncio.to_thread(files.delete_file, draft.dir, path)
     except FilesError as failure:
         raise _files_error(failure)
     drafts.save(draft)
@@ -92,33 +107,138 @@ async def add_mode(draft_id: str, body: ModeCreate):
     return ok({"mode": body.mode, "modes": files.manifest_modes(manifest.read_text(encoding="utf-8")), "files": drafts.file_tree(draft.dir), "lint": await _lint(draft)})
 
 
-@router.delete("/drafts/{draft_id}/modes/{mode}")
-async def remove_mode(draft_id: str, mode: str):
-    draft = _load(draft_id)
+def _mode_to_remove(draft: drafts.Draft, mode: str):
     try:
         files.check_mode_name(mode)
     except FilesError as failure:
         raise _files_error(failure)
-    manifest = draft.dir / files.MANIFEST
-    text = manifest.read_text(encoding="utf-8")
+    text = (draft.dir / files.MANIFEST).read_text(encoding="utf-8")
     modes = files.manifest_modes(text)
     if mode not in modes and not (draft.dir / "modes" / mode).exists():
         raise error(404, "not_found", f"no mode {mode}")
     if modes == [mode]:
         raise error(409, "conflict", "a preset keeps at least one mode")
-    citing = await asyncio.to_thread(files.citing_files, draft.dir, mode)
-    if citing:
-        raise error(
-            409, "conflict",
-            f"{', '.join(citing)} load files of the mode {mode}: point them elsewhere before removing it",
-            citing=citing,
-        )
-    folder = draft.dir / "modes" / mode
+    return text
+
+
+def _first_link(folder: Path) -> Optional[str]:
+    for top, folders, names in os.walk(folder):
+        for name in sorted([*folders, *names]):
+            if publish._is_link(Path(top) / name):
+                return (Path(top) / name).relative_to(folder).as_posix()
+    return None
+
+
+def _refusal(draft: drafts.Draft, mode: str):
+    link = _first_link(draft.dir)
+    if link is not None:
+        message = f"The mode {mode} cannot be removed: the draft holds a link, {link}, and Preset Editor never works through a link. Remove the link from the draft folder on the server, or use Discard draft."
+        return {"message": message, "citing": [], "pointers": [], "loaders": []}
+    pointers, loaders = files.mode_citations(draft.dir, mode)
+    if not pointers and not loaders:
+        return None
+    message = files.citation_message(f"The mode {mode} cannot be removed", pointers, loaders, ("loads one of its files", "load its files"))
+    return {"message": message, "citing": sorted(pointers + loaders), "pointers": pointers, "loaders": loaders}
+
+
+def _drop_mode(preset_dir: Path, text: str, mode: str) -> None:
+    folder = preset_dir / "modes" / mode
     if folder.is_dir():
-        await asyncio.to_thread(shutil.rmtree, folder)
-    manifest.write_text(files.remove_mode_from_manifest(text, mode), encoding="utf-8")
+        shutil.rmtree(folder)
+    (preset_dir / files.MANIFEST).write_text(files.remove_mode_from_manifest(text, mode), encoding="utf-8")
+
+
+FOLDER = "<preset folder>"
+MODES_LIST = re.compile(r"(\bmodes: )\[(?:'[^'\n]*'(?:, )?)*\]")
+KEY_LIMIT = 4096
+
+
+def _prefixes(folder: Path) -> List[str]:
+    found = set()
+    for candidate in (folder, folder.resolve()):
+        found.update((str(candidate), candidate.as_posix()))
+        try:
+            relative = Path(os.path.relpath(candidate))
+        except ValueError:
+            continue
+        found.update((str(relative), relative.as_posix()))
+    forms = {form for item in found for form in (item, item.replace("\\", "/"), item.replace("/", "\\"))}
+    return sorted((item for item in forms if item not in ("", ".")), key=len, reverse=True)
+
+
+def _inside(messages: List[str], folder: Path) -> List[str]:
+    prefixes = _prefixes(folder)
+    out = []
+    for message in messages:
+        for prefix in prefixes:
+            message = message.replace(prefix + "/", "").replace(prefix + "\\", "")
+        for prefix in prefixes:
+            message = message.replace(prefix, FOLDER)
+        out.append(message)
+    return out
+
+
+def _key(message: str) -> str:
+    return message if len(message) > KEY_LIMIT else MODES_LIST.sub(r"\1[…]", message)
+
+
+def _added(before: List[str], after: List[str]) -> List[str]:
+    left = Counter(_key(item) for item in before)
+    found = []
+    for item in after:
+        if left[_key(item)]:
+            left[_key(item)] -= 1
+        else:
+            found.append(item)
+    return found
+
+
+def _copy_without(draft: drafts.Draft, scratch: Path, text: str, mode: str) -> Path:
+    copy = scratch / draft.dir.name
+    shutil.copytree(draft.dir, copy, ignore=drafts.ignore_private)
+    _drop_mode(copy, text, mode)
+    return copy
+
+
+async def _check_removal(draft: drafts.Draft, text: str, mode: str):
+    errors, warnings = await core_bridge.lint_async(draft.dir)
+    scratch = Path(await asyncio.to_thread(tempfile.mkdtemp, prefix="preset-editor-removal-"))
+    try:
+        copy = await asyncio.to_thread(_copy_without, draft, scratch, text, mode)
+        errors_after, warnings_after = await core_bridge.lint_async(copy)
+    finally:
+        await asyncio.to_thread(shutil.rmtree, scratch, True)
+    return await asyncio.to_thread(_compare, (errors, warnings), (errors_after, warnings_after), draft.dir, copy)
+
+
+def _compare(before, after, folder: Path, copy: Path):
+    return tuple(_added(_inside(old, folder), _inside(new, copy)) for old, new in zip(before, after))
+
+
+@router.get("/drafts/{draft_id}/modes/{mode}/removal")
+async def mode_removal(draft_id: str, mode: str):
+    draft = _load(draft_id)
+    text = _mode_to_remove(draft, mode)
+    refusal = await asyncio.to_thread(_refusal, draft, mode)
+    if refusal:
+        return ok({"mode": mode, "allowed": False, **refusal, "errors": [], "warnings": []})
+    try:
+        errors, warnings = await _check_removal(draft, text, mode)
+    except Exception as failure:
+        raise error(500, "check_failed", f"the lint of the draft without the mode {mode} could not run ({type(failure).__name__})")
+    return ok({"mode": mode, "allowed": True, "message": "", "citing": [], "pointers": [], "loaders": [], "errors": errors, "warnings": warnings})
+
+
+@router.delete("/drafts/{draft_id}/modes/{mode}")
+async def remove_mode(draft_id: str, mode: str):
+    draft = _load(draft_id)
+    text = _mode_to_remove(draft, mode)
+    refusal = await asyncio.to_thread(_refusal, draft, mode)
+    if refusal:
+        raise error(409, "conflict", refusal.pop("message"), **refusal)
+    await asyncio.to_thread(_drop_mode, draft.dir, text, mode)
     drafts.save(draft)
-    return ok({"mode": mode, "modes": files.manifest_modes(manifest.read_text(encoding="utf-8")), "files": drafts.file_tree(draft.dir), "lint": await _lint(draft)})
+    return ok({"mode": mode, "modes": files.manifest_modes((draft.dir / files.MANIFEST).read_text(encoding="utf-8")), "files": drafts.file_tree(draft.dir), "lint": await _lint(draft)})
 
 
 @router.get("/reference/shared")

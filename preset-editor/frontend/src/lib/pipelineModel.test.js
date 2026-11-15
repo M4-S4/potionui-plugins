@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { insertPipe, isPointer, movePipe, newPipe, parsePipelineDocument, pipeRef, pipeTitle, pipelineProblems, pointerFile, pointerProblems, removePipe, serializePipelineDocument, sourcesBefore, startChain } from './pipelineModel.js';
+import { insertPipe, isPointer, movePipe, newPipe, parsePipelineDocument, pipeRef, pipeTitle, pipelineProblems, pointerFile, pointerProblems, removePipe, saveAllowed, serializePipelineDocument, sourcesBefore, startChain } from './pipelineModel.js';
 import { parseYaml } from './yaml.js';
 
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'tests', 'fixtures');
@@ -143,10 +143,42 @@ test('pointerProblems refuses what the core loader refuses', () => {
 	assert.match(problems('pipeline_from: video\npipeline: []\n')[0], /cannot be combined with other keys \(pipeline\)/);
 	assert.match(problems('pipeline_from: video\nnote: x\n')[0], /cannot be combined with other keys \(note\)/);
 	assert.match(problems('pipeline_from: ../video\n')[0], /must name a sibling mode directory/);
+	assert.match(problems("pipeline_from: 'video\\sub'\n")[0], /must name a sibling mode directory, got "video\\\\sub"/);
+	assert.match(problems('pipeline_from: video/sub\n')[0], /must name a sibling mode directory, got "video\/sub"/);
 	assert.match(problems('pipeline_from: .video\n')[0], /must name a sibling mode directory/);
 	assert.match(problems('pipeline_from: ""\n')[0], /must name a sibling mode directory/);
 	assert.match(problems('pipeline_from: 3\n')[0], /must name a sibling mode directory/);
 	assert.match(problems('pipeline_from: refs\n')[0], /modes\/refs\/pipeline\.yml not found/);
 	assert.match(problems('pipeline_from: first_last\n')[0], /cannot point at itself/);
 	assert.deepEqual(problems('pipeline_from: video\n'), []);
+});
+
+test('a pointer to a mode that is itself a pointer, or whose pipeline.yml does not parse, is refused as the core does', () => {
+	const files = ['modes/video/pipeline.yml', 'modes/first_last/pipeline.yml'];
+	const doc = parsePipelineDocument('pipeline_from: video\n');
+	const problems = (targetText) => pointerProblems(doc, { mode: 'first_last', files, targetText });
+
+	assert.deepEqual(problems('pipeline_from: txt2video\n'), ['pipeline_from: modes/video is itself a pointer; point at the mode that owns the pipeline']);
+	assert.match(problems('pipeline: [\n')[0], /^pipeline_from: modes\/video\/pipeline\.yml failed to parse: /);
+	assert.deepEqual(problems('pipeline:\n  - name: seed_generator\n'), []);
+	assert.deepEqual(problems(''), []);
+	assert.deepEqual(problems('- a\n'), []);
+	assert.deepEqual(problems(null), []);
+	assert.deepEqual(pointerProblems(doc, { mode: 'first_last', files }), []);
+	assert.match(pointerProblems(parsePipelineDocument('pipeline_from: video\nnote: x\n'), { mode: 'first_last', files, targetText: 'pipeline_from: x\n' })[0], /cannot be combined/);
+});
+
+test('the builder saves only an edited pipeline of its own, never a pointer', () => {
+	const own = parsePipelineDocument('pipeline: []\n');
+	const pointer = parsePipelineDocument('pipeline_from: video\n');
+	const ready = { phase: 'ready', dirty: true, problems: 0, saving: false };
+
+	assert.equal(saveAllowed({ ...ready, doc: own }), true);
+	assert.equal(saveAllowed({ ...ready, doc: pointer }), false);
+	assert.equal(saveAllowed({ ...ready, doc: parsePipelineDocument('pipeline_from: video\npipeline:\n  - name: gallery\n') }), false);
+	assert.equal(saveAllowed({ ...ready, doc: own, dirty: false }), false);
+	assert.equal(saveAllowed({ ...ready, doc: own, problems: 1 }), false);
+	assert.equal(saveAllowed({ ...ready, doc: own, saving: true }), false);
+	assert.equal(saveAllowed({ ...ready, doc: own, phase: 'loading' }), false);
+	assert.equal(saveAllowed({ ...ready, doc: null }), false);
 });

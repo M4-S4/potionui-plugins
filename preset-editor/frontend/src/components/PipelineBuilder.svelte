@@ -5,7 +5,7 @@
 	import { readFile, writeFile } from '../lib/client.js';
 	import { confirm, toast } from '../lib/dom.js';
 	import { modeOf } from '../lib/files.js';
-	import { PIPE_KEYS, POINTER_KEY, insertPipe, isPointer, isTemplated, movePipe, newPipe, parsePipelineDocument, pipeRef, pipeTitle, pipelineProblems, pointerFile, pointerProblems, referenceMap, removePipe, serializePipelineDocument, sourcesBefore, startChain, toPipe } from '../lib/pipelineModel.js';
+	import { PIPE_KEYS, POINTER_KEY, insertPipe, isPointer, isTemplated, movePipe, newPipe, parsePipelineDocument, pipeRef, pipeTitle, pipelineProblems, pointerFile, pointerProblems, referenceMap, removePipe, saveAllowed, serializePipelineDocument, sourcesBefore, startChain, toPipe } from '../lib/pipelineModel.js';
 	import { commentLines, dumpYaml, parseYaml } from '../lib/yaml.js';
 
 	let { api, draftId, path, reference = [], files = [], onDirty, onSaved, onOpenYaml, onOpenFile } = $props();
@@ -24,6 +24,8 @@
 	let seenId = $state('');
 	let extraText = $state('');
 	let extraError = $state('');
+	let targetText = $state(null);
+	let targetRead = 0;
 
 	const mode = $derived(modeOf(path));
 	const refs = $derived(referenceMap(reference));
@@ -34,8 +36,9 @@
 	const pointer = $derived(phase === 'ready' && isPointer(doc));
 	const pointerTarget = $derived(pointer ? doc.unknown[POINTER_KEY] : null);
 	const pointerPath = $derived(pointer ? pointerFile(doc) : null);
-	const pointerIssues = $derived(pointer ? pointerProblems(doc, { mode, files }) : []);
+	const pointerIssues = $derived(pointer ? pointerProblems(doc, { mode, files, targetText }) : []);
 	const blocked = $derived(report.count + (extraError ? 1 : 0) + pointerIssues.length);
+	const canSave = $derived(saveAllowed({ phase, doc, dirty, problems: blocked, saving }));
 	const selected = $derived(doc ? doc.pipes.find((pipe) => pipe.id === selectedId) ?? null : null);
 	const index = $derived(doc && selected ? doc.pipes.indexOf(selected) : -1);
 	const known = $derived(selected ? refs.get(String(selected.attrs.name ?? '')) ?? null : null);
@@ -56,6 +59,10 @@
 	$effect(() => {
 		path;
 		load();
+	});
+
+	$effect(() => {
+		readTarget(pointer && pointerPath && files.includes(pointerPath) ? pointerPath : null);
 	});
 
 	$effect(() => {
@@ -94,8 +101,17 @@
 		adopt(result.data.content, result.data.etag);
 	}
 
+	async function readTarget(target) {
+		targetRead += 1;
+		const ticket = targetRead;
+		targetText = null;
+		if (!target) return;
+		const result = await readFile(api, draftId, target);
+		if (ticket === targetRead) targetText = result.ok ? result.data.content : null;
+	}
+
 	async function save(overrideEtag = null) {
-		if (saving || blocked || !doc || pointer) return;
+		if (!canSave) return;
 		const text = serializePipelineDocument(doc);
 		if (comments && overrideEtag === null) {
 			const ok = await confirm({ title: `Rewrite ${path}?`, message: `The builder writes the whole file: its ${comments} comment line${comments > 1 ? 's' : ''} and the original formatting go away. The YAML view keeps them.`, variant: 'warning' });
@@ -240,7 +256,7 @@
 	function onKeydown(event) {
 		if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
 			event.preventDefault();
-			if (dirty && !pointer) save();
+			if (canSave) save();
 		}
 	}
 
@@ -262,7 +278,7 @@
 		{#if blocked}<Pill tone="danger">{blocked} problem{blocked > 1 ? 's' : ''}</Pill>{/if}
 		<span class="flex-1"></span>
 		<ActionButton variant="ghost" icon="edit" title="Edit the raw YAML" onclick={onOpenYaml}>YAML</ActionButton>
-		<ActionButton variant="primary" icon="check" loading={saving} disabled={!dirty || !!blocked || phase !== 'ready' || pointer} title={pointer ? 'This mode takes its pipeline from another mode: nothing to save here' : 'Save (Ctrl+S)'} onclick={() => save()}>Save</ActionButton>
+		<ActionButton variant="primary" icon="check" loading={saving} disabled={!canSave} title={pointer ? 'This mode takes its pipeline from another mode: nothing to save here' : 'Save (Ctrl+S)'} onclick={() => save()}>Save</ActionButton>
 	</div>
 
 	{#if conflict}
