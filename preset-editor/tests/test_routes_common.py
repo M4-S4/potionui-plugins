@@ -24,6 +24,8 @@ REFUSED_REQUESTS = {
     "x-api-key": {"headers": {"X-API-Key": KEY}},
     "token in the query": {"params": {"token": KEY}},
     "access_token in the query": {"params": {"access_token": KEY}},
+    "api_key in the query": {"params": {"api_key": KEY}},
+    "key in the query": {"params": {"key": KEY}},
 }
 
 
