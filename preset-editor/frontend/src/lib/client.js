@@ -87,6 +87,9 @@ export function normalizeError(body, status = 0) {
 		const fields = isObject(body.detail) ? body.detail : body;
 		if (typeof fields.etag === 'string') error.etag = fields.etag;
 		if (typeof fields.content === 'string') error.content = fields.content;
+		for (const key of ['citing', 'pointers', 'loaders']) {
+			if (Array.isArray(fields[key])) error[key] = fields[key].filter((item) => typeof item === 'string');
+		}
 	}
 	return error;
 }
@@ -229,6 +232,10 @@ export function addMode(api, draftId, body) {
 
 export function removeMode(api, draftId, mode) {
 	return callPlugin(api, 'delete', `/drafts/${segment(draftId)}/modes/${segment(mode)}`);
+}
+
+export function fileDeletion(api, draftId, path) {
+	return callPlugin(api, 'get', `/drafts/${segment(draftId)}/deletion?path=${encodeURIComponent(path)}`);
 }
 
 export function modeRemoval(api, draftId, mode) {

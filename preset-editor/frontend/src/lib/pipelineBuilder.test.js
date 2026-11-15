@@ -19,3 +19,10 @@ test('the pipeline builder checks a pointer with the text of the pipeline it nam
 	assert.match(SOURCE, /pointerProblems\(doc, \{ mode, files, targetText \}\)/);
 	assert.match(SOURCE, /readTarget\(pointer && pointerPath && files\.includes\(pointerPath\) \? pointerPath : null\);/);
 });
+
+test('a pointer replaces the whole pipe editor with the read-only view', () => {
+	const pointer = SOURCE.indexOf('{:else if pointer}');
+	const editor = SOURCE.indexOf('<div class="builder-grid');
+	assert.ok(pointer > 0 && editor > pointer, `${pointer} ${editor}`);
+	assert.doesNotMatch(SOURCE.slice(pointer, editor), /onclick=\{\(\) => (add|remove|duplicate)\(|insertPipe|removePipe/);
+});

@@ -13,7 +13,8 @@
 	import TextEditor from './TextEditor.svelte';
 	import { adminPresetUrl } from '../lib/catalog.js';
 	import { addMode, deleteDraft, downloadDraft, fieldTypes, knownModes, getDraft, lintDraft, modeRemoval, pipesReference, publishDraft, removeMode, sharedReference } from '../lib/client.js';
-	import { removalMessage } from '../lib/modes.js';
+	import { refusalOf, removalPlan } from '../lib/modes.js';
+	import RefusalNotice from './RefusalNotice.svelte';
 	import { MODE_RE, canPublish, describeSource, formatTimestamp } from '../lib/drafts.js';
 	import { fileKind, isEditable, isMedia, modeOf } from '../lib/files.js';
 	import { confirm, toast } from '../lib/dom.js';
@@ -32,6 +33,7 @@
 	let types = $state.raw([]);
 	let pipes = $state.raw([]);
 	let busy = $state('');
+	let refusal = $state(null);
 	let install = $state(true);
 	let published = $state.raw(null);
 	let failure = $state.raw(null);
@@ -165,24 +167,22 @@
 	}
 
 	async function dropMode(mode) {
-		busy = 'mode';
-		const check = await modeRemoval(api, draft.draft_id, mode);
+		refusal = null;
+		busy = `remove:${mode}`;
+		const plan = removalPlan(await modeRemoval(api, draft.draft_id, mode));
 		busy = '';
-		if (!check.ok) {
-			toast('error', check.error.message);
+		if (plan.action === 'refuse') {
+			refusal = plan.refusal;
 			return;
 		}
-		if (!check.data.allowed) {
-			toast('error', check.data.message);
-			return;
-		}
-		const ok = await confirm({ title: `Remove the mode ${mode}?`, message: removalMessage(check.data), variant: 'danger' });
+		const ok = await confirm({ title: `Remove the mode ${mode}?`, message: plan.message, variant: 'danger' });
 		if (!ok) return;
-		busy = 'mode';
+		busy = `remove:${mode}`;
 		const result = await removeMode(api, draft.draft_id, mode);
 		busy = '';
 		if (!result.ok) {
-			toast('error', result.error.message);
+			refusal = refusalOf(result.error, 'mode');
+			if (!refusal) toast('error', result.error.message);
 			return;
 		}
 		updated({ files: result.data.files, lint: result.data.lint });
@@ -217,12 +217,19 @@
 					{#each modes as mode (mode)}
 						<li class="flex items-center gap-1">
 							<span class="flex-1 font-mono text-fg">{mode}</span>
-							<button type="button" class="rounded p-0.5 text-fg-subtle hover:text-danger" title="Remove the mode {mode}" disabled={!!busy || modes.length < 2} onclick={() => dropMode(mode)}>
-								<Icon name="trash" class="h-3.5 w-3.5" />
+							<button type="button" class="rounded p-0.5 text-fg-subtle hover:text-danger" title="Remove the mode {mode}" aria-busy={busy === `remove:${mode}` ? 'true' : undefined} disabled={!!busy || modes.length < 2} onclick={() => dropMode(mode)}>
+								{#if busy === `remove:${mode}`}
+									<span class="block h-3.5 w-3.5 animate-spin rounded-full border-2 border-line-strong border-t-current" aria-hidden="true"></span>
+								{:else}
+									<Icon name="trash" class="h-3.5 w-3.5" />
+								{/if}
 							</button>
 						</li>
 					{/each}
 				</ul>
+				{#if refusal}
+					<div class="mt-2"><RefusalNotice {refusal} onClose={() => (refusal = null)} /></div>
+				{/if}
 				<form class="mt-2 flex items-center gap-1" onsubmit={(event) => { event.preventDefault(); createMode(); }}>
 					<input type="text" class="input min-w-0 flex-1 font-mono text-xs" placeholder="new mode" list="preset-editor-known-modes" bind:value={newMode} aria-label="New mode name" />
 					<datalist id="preset-editor-known-modes">

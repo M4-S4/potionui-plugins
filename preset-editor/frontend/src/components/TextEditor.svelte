@@ -1,10 +1,12 @@
 <script>
 	import ActionButton from './ActionButton.svelte';
 	import Pill from './Pill.svelte';
-	import { deleteFile, readFile, writeFile } from '../lib/client.js';
+	import { deleteFile, fileDeletion, readFile, writeFile } from '../lib/client.js';
 	import { fileKind, insertAt, lineCount, snippetsFor } from '../lib/files.js';
 	import { confirm, toast } from '../lib/dom.js';
 	import { renderMarkdown } from '../lib/markdown.js';
+	import { deletionPlan, refusalOf } from '../lib/modes.js';
+	import RefusalNotice from './RefusalNotice.svelte';
 	import { parseYaml } from '../lib/yaml.js';
 
 	let { api, draftId, path, sharedFiles = [], onSaved, onDeleted, onDirty } = $props();
@@ -21,6 +23,8 @@
 	let textarea = $state();
 	let gutter = $state();
 	let preview = $state(false);
+	let refusal = $state(null);
+	let checking = $state(false);
 
 	const kind = $derived(fileKind(path));
 	const dirty = $derived(content !== loaded);
@@ -41,6 +45,7 @@
 
 	async function load() {
 		phase = 'loading';
+		refusal = null;
 		conflict = null;
 		error = '';
 		const result = await readFile(api, draftId, path);
@@ -119,11 +124,20 @@
 	}
 
 	async function remove() {
-		const ok = await confirm({ title: `Delete ${path}?`, message: 'The file leaves the draft; publishing writes the draft as it is.', variant: 'danger' });
+		refusal = null;
+		checking = true;
+		const plan = deletionPlan(await fileDeletion(api, draftId, path));
+		checking = false;
+		if (plan.action === 'refuse') {
+			refusal = plan.refusal;
+			return;
+		}
+		const ok = await confirm({ title: `Delete ${path}?`, message: plan.message, variant: 'danger' });
 		if (!ok) return;
 		const result = await deleteFile(api, draftId, path);
 		if (!result.ok) {
-			toast('error', result.error.message);
+			refusal = refusalOf(result.error, 'file');
+			if (!refusal) toast('error', result.error.message);
 			return;
 		}
 		onDeleted?.(result.data);
@@ -158,9 +172,13 @@
 		{/if}
 		<ActionButton variant="primary" icon="check" loading={saving} disabled={!dirty || phase !== 'ready'} title="Save (Ctrl+S)" onclick={() => save()}>Save</ActionButton>
 		{#if path !== 'preset.yml'}
-			<ActionButton variant="ghost" icon="trash" title="Delete this file" onclick={remove}>Delete</ActionButton>
+			<ActionButton variant="ghost" icon="trash" loading={checking} title="Delete this file" onclick={remove}>Delete</ActionButton>
 		{/if}
 	</div>
+
+	{#if refusal}
+		<div class="border-b border-line px-3 py-2"><RefusalNotice {refusal} onClose={() => (refusal = null)} /></div>
+	{/if}
 
 	{#if conflict}
 		<div class="flex flex-wrap items-center gap-2 border-b border-warning/40 bg-warning/10 px-3 py-2 text-xs text-fg" role="alert">
