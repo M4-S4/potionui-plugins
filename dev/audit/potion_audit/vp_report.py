@@ -227,14 +227,21 @@ def _change(after, before) -> float | None:
     return round((after - before) / before, 3)
 
 
+def pack_change(mine: dict, theirs: dict, what: str) -> dict | None:
+    if mine.get("id") != theirs.get("id"):
+        raise ReportError(f"compare needs two {what} of the same pack: this one ran {mine.get('id')}, the other {theirs.get('id')}")
+    if mine.get("sha256") == theirs.get("sha256"):
+        return None
+    return {"previous": {key: theirs.get(key) for key in ("id", "version", "sha256")}, "now": {key: mine.get(key) for key in ("id", "version", "sha256")}}
+
+
+def pack_line(change: dict) -> str:
+    then, now = change["previous"], change["now"]
+    return f"pack: {then.get('id')} {then.get('version')} ({str(then.get('sha256'))[:12]}) then, {now.get('version')} ({str(now.get('sha256'))[:12]}) now"
+
+
 def compare_scenarios(current: Scenario, previous: Scenario) -> dict:
-    mine = current.pack
-    theirs = previous.pack
-    if mine.get("id") != theirs.get("id") or mine.get("sha256") != theirs.get("sha256"):
-        raise ReportError(
-            f"compare needs two scenarios of the same pack: this one has {mine.get('id')} {str(mine.get('sha256'))[:12]}, "
-            f"the other {theirs.get('id')} {str(theirs.get('sha256'))[:12]}"
-        )
+    changed_pack = pack_change(current.pack, previous.pack, "scenarios")
     before = {step.key: step for step in previous.steps}
     rows = []
     for step in current.steps:
@@ -274,8 +281,11 @@ def compare_scenarios(current: Scenario, previous: Scenario) -> dict:
     for label, now, then in (("machine", current.machine, previous.machine), ("application", current.app_version, previous.app_version), ("plugin", (current.data.get("plugin") or {}).get("version"), (previous.data.get("plugin") or {}).get("version"))):
         if now != then:
             settings.append(f"{label}: {then} then, {now} now")
+    if changed_pack:
+        settings.append(pack_line(changed_pack))
     return {
-        "previous": {"run_id": previous.run_id, "started_at": previous.data.get("started_at"), "app_version": previous.app_version},
+        "previous": {"run_id": previous.run_id, "started_at": previous.data.get("started_at"), "app_version": previous.app_version, "machine": previous.machine},
+        "pack_change": changed_pack,
         "rows": rows,
         "only_in_previous": [key for key in before if key not in keys],
         "only_in_this_run": [step.key for step in current.steps if step.key not in before],

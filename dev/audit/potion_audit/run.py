@@ -8,7 +8,7 @@ from pathlib import Path
 
 from .cases import Case, CaseSet
 from .check import lookup_model, runner_info
-from .client import ApiClient, ApiError, unwrap
+from .client import ApiClient, ApiError, ApiUnreachable, unwrap
 from .media import probe_image, probe_video
 
 TERMINAL = {"completed", "failed", "cancelled"}
@@ -110,6 +110,8 @@ def evaluate_run_report(checks: dict, run_report: dict) -> list[dict]:
     results = []
     if sum(asked):
         results.append({"check": "media_loaded", "expected": f"{sum(asked)} media files loaded", "actual": loaded, "ok": sum(loaded) >= sum(asked)})
+    elif checks.get("bound_media"):
+        results.append({"check": "media_loaded", "expected": f"the {checks['bound_media']} media the cell binds processed and loaded", "actual": "the run report names no media file processed", "ok": False})
     forbidden = {step.upper() for step in checks.get("forbidden_steps") or ()}
     if forbidden:
         seen = sorted({step.strip() for index, step in enumerate(steps) if step.strip().upper() in forbidden and not _refines_source(steps[:index], step)})
@@ -161,12 +163,34 @@ def follow(client: ApiClient, generation_id: str, timeout: float, interval: floa
 
 def settle(client: ApiClient, generation_id: str, bound: float, interval: float, clock: Callable[[], float], sleep: Callable[[float], None]) -> dict:
     started = clock()
+    errors = []
     while True:
-        state = _status(client, generation_id).get("status")
+        gone = False
+        try:
+            state = _status(client, generation_id).get("status")
+        except (ApiError, ApiUnreachable, ValueError) as error:
+            state = None
+            gone = isinstance(error, ApiError) and error.status == 404
+            errors.append(str(error) or type(error).__name__)
         waited = round(clock() - started, 3)
-        if state in TERMINAL or waited > bound:
-            return {"settled": state in TERMINAL, "status": state, "waited_seconds": waited, "bound_seconds": bound}
-        sleep(interval)
+        if state in TERMINAL or gone or waited >= bound:
+            found = {"settled": state in TERMINAL, "status": state, "waited_seconds": waited, "bound_seconds": bound}
+            if errors:
+                found.update(poll_errors=len(errors), last_error=errors[-1])
+            return found
+        sleep(min(interval, bound - waited))
+
+
+def cancel_and_settle(client: ApiClient, generation_id: str, interval: float, clock: Callable[[], float], sleep: Callable[[float], None]) -> dict:
+    asked = None
+    try:
+        client.post_json(f"/api/generations/{generation_id}/cancel", {})
+    except (ApiError, ApiUnreachable, ValueError) as error:
+        asked = str(error) or type(error).__name__
+    found = settle(client, generation_id, CANCEL_WAIT_SECONDS, interval, clock, sleep)
+    if asked:
+        found["cancel_error"] = asked
+    return found
 
 
 def step_seconds(samples: list[dict]) -> float | None:
@@ -366,11 +390,23 @@ def submit_and_collect(client: ApiClient, request: dict, preset_id: str, checks:
         _write(case_dir, result)
         raise
     if timed_out:
-        client.post_json(f"/api/generations/{generation_id}/cancel", {})
-        result["cancel"] = settle(client, generation_id, CANCEL_WAIT_SECONDS, interval, clock, sleep)
+        result["cancel"] = cancel_and_settle(client, generation_id, interval, clock, sleep)
         log(f"{label}: cancelled, {'settled' if result['cancel']['settled'] else 'still ' + str(result['cancel']['status'])} after {result['cancel']['waited_seconds']} s")
     result["samples"] = samples
     result["final_status"] = status
+    try:
+        _collect(client, result, generation_id, preset_id, checks, case_dir, stats_before, status, samples, timed_out, interval, sleep, keep_bundle)
+    except (ApiError, ApiUnreachable, ValueError) as error:
+        if not timed_out:
+            raise
+        result["verdict"] = "TIMEOUT"
+        result["collect_error"] = str(error) or type(error).__name__
+    _write(case_dir, result)
+    log(f"{label}: {result['verdict']} in {(result.get('timing') or {}).get('run_seconds')} s")
+    return result
+
+
+def _collect(client: ApiClient, result: dict, generation_id: str, preset_id: str, checks: dict, case_dir: Path, stats_before: dict, status: dict, samples: list[dict], timed_out: bool, interval: float, sleep: Callable[[float], None], keep_bundle: bool) -> None:
     admin, stats_after = wait_for_stats(client, generation_id, preset_id, stats_before, 10, interval, sleep)
     record = unwrap(client.get_json(f"/api/generations/history/{generation_id}")) or {}
     run_report = admin.get("run_report") or {}
@@ -410,9 +446,6 @@ def submit_and_collect(client: ApiClient, request: dict, preset_id: str, checks:
             result["verdict"] = "OOM"
         else:
             result["verdict"] = "FAIL"
-    _write(case_dir, result)
-    log(f"{label}: {result['verdict']} in {result['timing']['run_seconds']} s")
-    return result
 
 
 def _write(case_dir: Path, result: dict) -> None:

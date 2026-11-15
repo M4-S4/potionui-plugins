@@ -200,3 +200,39 @@ def test_a_busy_queue_before_a_cell_stops_the_run(fake_api, tmp_path, case_file)
     with pytest.raises(RunRefused, match="queue is busy"):
         run_profile(logged_in(fake_api), pack, "smoke", tmp_path / "out", "matrix-6", log=quiet)
     assert fake_api.started == []
+
+
+def test_a_timed_out_cell_whose_cancel_settles_lets_the_next_cell_run(fake_api, tmp_path, case_file):
+    pack = load_pack(write_pack(tmp_path, case_file))
+    fake_api.statuses = [{"id": "G1", "status": "running", "current_step_num": 1, "total_steps": 4}] * 4
+    fake_api.outcomes = [("cancelled", None), ("completed", None)]
+    clock = FakeClock()
+    run = run_profile(logged_in(fake_api), pack, "smoke", tmp_path / "out", "matrix-9", beyond_tier=True, timeout=5, clock=clock, sleep=clock.sleep, log=quiet)
+    assert [(entry["cell"], entry["status"], entry["verdict"]) for entry in run["cells"]] == [("core/SDXL:txt2img", "ready", "TIMEOUT"), ("core/Wan:video", "ready_beyond_tier", "PASS")]
+    assert run["stopped"] is None
+    assert len(fake_api.started) == 2
+    first = json.loads((tmp_path / "out" / "matrix-9" / "cells" / "core-SDXL--txt2img" / "result.json").read_text(encoding="utf-8"))
+    assert (first["cancel"]["settled"], first["cancel"]["status"]) == (True, "cancelled")
+
+
+def test_a_timed_out_cell_whose_cancel_never_settles_stops_the_run_at_the_next_cell(fake_api, tmp_path, case_file):
+    from conftest import envelope
+
+    pack = load_pack(write_pack(tmp_path, case_file))
+    fake_api.statuses = [{"id": "G1", "status": "running", "current_step_num": 1, "total_steps": 4}] * 4
+    fake_api.outcomes = [("running", None)]
+    route = fake_api.route
+
+    def busy(method, path, query, body, headers):
+        if path == "/api/admin/generations/queue" and ("POST", "/api/generations/G1/cancel") in fake_api.methods():
+            return 200, envelope({"pending": [], "running": [{"id": "G1"}]}), "application/json"
+        return route(method, path, query, body, headers)
+
+    fake_api.route = busy
+    clock = FakeClock()
+    run = run_profile(logged_in(fake_api), pack, "smoke", tmp_path / "out", "matrix-10", beyond_tier=True, timeout=5, clock=clock, sleep=clock.sleep, log=quiet)
+    assert [(entry["cell"], entry["status"], entry["verdict"]) for entry in run["cells"]] == [("core/SDXL:txt2img", "ready", "TIMEOUT"), ("core/Wan:video", "not_run", None)]
+    assert run["stopped"] == "stopped: the global queue is busy: 1 running, 0 pending"
+    assert len(fake_api.started) == 1
+    first = json.loads((tmp_path / "out" / "matrix-10" / "cells" / "core-SDXL--txt2img" / "result.json").read_text(encoding="utf-8"))
+    assert (first["cancel"]["settled"], first["cancel"]["waited_seconds"]) == (False, 300.0)

@@ -15,7 +15,7 @@ from potion_audit.pack import load_pack
 from potion_audit.reevaluate import ReevaluateError, reevaluate_run
 from potion_audit.report import ReportError, add_pack_cells, bias_factors, compare_sets, load_set, reduce_home, render_merge, write_report
 
-from conftest import PASSWORD, USER
+from conftest import PASSWORD, SDXL_SHA, USER
 from packs import write_pack
 from test_media import make_video
 
@@ -291,18 +291,41 @@ def test_compare_lists_cells_missing_on_one_side_apart_from_the_changed_verdicts
     assert comparison["only_in_this_run"] == ["core/Wan:video"]
 
 
-def test_compare_refuses_two_runs_of_different_packs(fake_api, tmp_path, case_file, capsys):
+def test_compare_matches_the_cells_of_another_version_of_the_pack_and_refuses_another_pack(fake_api, tmp_path, case_file, capsys):
     pack = load_pack(write_pack(tmp_path, case_file))
-    play(fake_api, pack, tmp_path / "out", "old", machine="box")
-    play(fake_api, pack, tmp_path / "out", "new", machine="box")
+    play(fake_api, pack, tmp_path / "out", "old", machine="box", beyond_tier=True)
+    play(fake_api, pack, tmp_path / "out", "new", machine="box", beyond_tier=True)
     run = read(tmp_path / "out" / "old" / "run.json")
-    run["pack"]["sha256"] = "0" * 64
+    run["pack"].update(sha256="0" * 64, version="0.0.9")
     write(tmp_path / "out" / "old" / "run.json", run)
-    with pytest.raises(ReportError):
+    folder = tmp_path / "out" / "old" / "cells" / "core-SDXL--txt2img"
+    request = read(folder / "request.json")
+    request["form_data"]["steps"] = 30
+    request["idempotency_key"] = "another key"
+    write(folder / "request.json", request)
+    result = read(folder / "result.json")
+    result["timing"]["run_seconds"] = 4
+    write(folder / "result.json", result)
+    wan = tmp_path / "out" / "old" / "cells" / "core-Wan--video" / "request.json"
+    other = read(wan)
+    other["idempotency_key"] = "another key"
+    write(wan, other)
+    comparison = compare_sets(load_set([tmp_path / "out" / "new"]), load_set([tmp_path / "out" / "old"]))
+    assert comparison["pack_change"] == {"previous": {"id": "potion-test", "version": "0.0.9", "sha256": "0" * 64}, "now": {"id": "potion-test", "version": "0.1.0", "sha256": pack.sha256}}
+    assert [(row["cell"], row["request_changed"]) for row in comparison["rows"]] == [("core/SDXL:txt2img", True), ("core/Wan:video", False)]
+    code = main(["report", str(tmp_path / "out" / "new"), "--compare", str(tmp_path / "out" / "old"), "--no-media", "--out", str(tmp_path / "report"), "--pack", str(tmp_path / "pack" / "pack.toml")])
+    assert code == 0
+    page = (tmp_path / "report" / "index.html").read_text(encoding="utf-8")
+    assert f"Changed: pack: potion-test 0.0.9 (000000000000) then, 0.1.0 ({pack.sha256[:12]}) now. The cells are matched by their id; 1 of the 2 cells of both runs sent another request" in page
+    assert 'core/SDXL:txt2img</a> <span class="tag warn">request changed</span>' in page
+    assert "another request than under pack 0.0.9: 1" in page
+    run["pack"]["id"] = "potion-other"
+    write(tmp_path / "out" / "old" / "run.json", run)
+    with pytest.raises(ReportError, match="same pack"):
         compare_sets(load_set([tmp_path / "out" / "new"]), load_set([tmp_path / "out" / "old"]))
     code = main(["report", str(tmp_path / "out" / "new"), "--compare", str(tmp_path / "out" / "old"), "--no-media", "--pack", str(tmp_path / "pack" / "pack.toml")])
     assert code == 2
-    assert "same pack" in capsys.readouterr().err
+    assert "same pack: this one ran potion-test, the other potion-other" in capsys.readouterr().err
 
 
 def test_segments_from_two_machines_are_refused_by_report_and_merged_by_merge(fake_api, tmp_path, case_file):
@@ -354,3 +377,26 @@ def test_ssim_of_two_videos_samples_frames_and_a_thumbnail_comes_from_the_middle
     assert media_ssim(first, second, "video") < 0.99
     thumb = write_thumbnail(first, tmp_path / "t" / "a.jpg", "video", side=48)
     assert (thumb["width"], thumb["height"]) == (48, 32)
+
+
+def test_compare_reads_the_models_by_their_sha256_and_not_by_their_id_on_the_instance(fake_api, tmp_path, case_file, capsys):
+    pack = load_pack(write_pack(tmp_path, case_file))
+    play(fake_api, pack, tmp_path / "out", "old", machine="box")
+    fake_api.models[SDXL_SHA] = "M-SDXL-RESCANNED"
+    play(fake_api, pack, tmp_path / "out", "new", machine="box")
+    old = tmp_path / "out" / "old" / "cells" / "core-SDXL--txt2img"
+    new = tmp_path / "out" / "new" / "cells" / "core-SDXL--txt2img"
+    assert read(old / "request.json")["form_data"]["model"] != read(new / "request.json")["form_data"]["model"]
+    assert read(new / "result.json")["models"] == [{"field": "model", "sha256": SDXL_SHA, "filename": "aaaa.safetensors"}]
+    rows = compare_sets(load_set([tmp_path / "out" / "new"]), load_set([tmp_path / "out" / "old"]))["rows"]
+    assert rows[0]["request_changed"] is False
+    result = read(old / "result.json")
+    result["models"][0]["sha256"] = "9" * 64
+    write(old / "result.json", result)
+    rows = compare_sets(load_set([tmp_path / "out" / "new"]), load_set([tmp_path / "out" / "old"]))["rows"]
+    assert rows[0]["request_changed"] is True
+    run = read(tmp_path / "out" / "old" / "run.json")
+    run["machine"] = "old-box"
+    write(tmp_path / "out" / "old" / "run.json", run)
+    assert main(["report", str(tmp_path / "out" / "new"), "--compare", str(tmp_path / "out" / "old"), "--no-media", "--out", str(tmp_path / "report")]) == 0
+    assert "warning: the page shows the names of 2 machines: box, old-box" in capsys.readouterr().err

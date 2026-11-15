@@ -160,7 +160,7 @@ def test_a_cancel_that_never_settles_stops_waiting_at_its_bound(fake_api, case_s
     result, _ = run_case(fake_api, case_set, tmp_path, timeout=5)
     assert result["verdict"] == "TIMEOUT"
     assert result["cancel"]["settled"] is False and result["cancel"]["status"] == "running"
-    assert 300.0 < result["cancel"]["waited_seconds"] <= 304.0
+    assert result["cancel"]["waited_seconds"] == result["cancel"]["bound_seconds"] == 300.0
 
 
 def test_a_busy_queue_refuses_the_run_before_submitting(fake_api, case_set, tmp_path):
@@ -253,3 +253,69 @@ def test_seconds_per_step_come_from_running_samples_only():
     ]
     assert step_seconds(samples) == 2.0
     assert step_seconds([{"t": 1.0, "status": "running", "step": 1}]) is None
+
+
+class FlakyClient:
+    def __init__(self, answers):
+        self.answers = list(answers)
+
+    def get_json(self, path, params=None, missing_ok=False):
+        answer = self.answers.pop(0)
+        if isinstance(answer, Exception):
+            raise answer
+        return {"success": True, "data": {"id": "G1", "status": answer}}
+
+
+def test_a_network_error_while_waiting_for_the_cancel_is_recorded_and_the_wait_goes_on():
+    from potion_audit.client import ApiError, ApiUnreachable
+    from potion_audit.run import settle
+
+    clock = FakeClock()
+    client = FlakyClient([ApiUnreachable("GET http://127.0.0.1:1/api/generations/G1/status: timed out"), ApiError("GET", "/api/generations/G1/status", 502, "bad gateway"), "cancelled"])
+    found = settle(client, "G1", 300.0, 2.0, clock, clock.sleep)
+    assert (found["settled"], found["status"], found["waited_seconds"], found["poll_errors"]) == (True, "cancelled", 4.0, 2)
+    assert "502" in found["last_error"]
+
+
+def test_a_generation_gone_while_waiting_for_the_cancel_ends_the_wait():
+    from potion_audit.client import ApiError
+    from potion_audit.run import settle
+
+    clock = FakeClock()
+    found = settle(FlakyClient([ApiError("GET", "/api/generations/G1/status", 404, "not found")]), "G1", 300.0, 2.0, clock, clock.sleep)
+    assert (found["settled"], found["status"], found["waited_seconds"], found["poll_errors"]) == (False, None, 0.0, 1)
+
+
+def test_a_timed_out_run_keeps_its_verdict_when_the_instance_errs_after_the_cancel(fake_api, case_set, tmp_path):
+    fake_api.statuses = [{"id": "G1", "status": "running", "current_step_num": 1, "total_steps": 4}] * 4
+    fake_api.final = "cancelled"
+    route = fake_api.route
+    errors = {"status": 2}
+
+    def flaky(method, path, query, body, headers):
+        cancelled = ("POST", "/api/generations/G1/cancel") in fake_api.methods()
+        if cancelled and path == "/api/generations/G1/status" and errors["status"]:
+            errors["status"] -= 1
+            return 500, {"detail": "the database is locked"}, "application/json"
+        if cancelled and path == "/api/admin/generations/G1":
+            return 503, {"detail": "the instance is restarting"}, "application/json"
+        return route(method, path, query, body, headers)
+
+    fake_api.route = flaky
+    result, lines = run_case(fake_api, case_set, tmp_path, timeout=5)
+    assert result["verdict"] == "TIMEOUT"
+    assert (result["cancel"]["settled"], result["cancel"]["status"], result["cancel"]["poll_errors"]) == (True, "cancelled", 2)
+    assert "HTTP 503" in result["collect_error"]
+    saved = json.loads((tmp_path / "run-1" / "cases" / "SDXL--txt2img--sdxl-fast" / "result.json").read_text(encoding="utf-8"))
+    assert saved["verdict"] == "TIMEOUT" and saved["cancel"]["settled"] is True
+    assert lines[-1] == "SDXL:txt2img sdxl-fast: TIMEOUT in None s"
+
+
+@pytest.mark.parametrize("state", [None, "cancelling"])
+def test_a_state_that_is_not_terminal_is_polled_up_to_the_bound_and_no_longer(fake_api, case_set, tmp_path, state):
+    fake_api.statuses = [{"id": "G1", "status": "running", "current_step_num": 1, "total_steps": 4}] * 4
+    fake_api.final = state
+    clock = FakeClock()
+    result = execute(logged_in(fake_api), case_set, select_case(case_set, "SDXL:txt2img"), tmp_path, "run-1", timeout=5, clock=clock, sleep=clock.sleep, log=lambda line: None)
+    assert result["verdict"] == "TIMEOUT"
+    assert (result["cancel"]["settled"], result["cancel"]["status"], result["cancel"]["waited_seconds"]) == (False, state, 300.0)

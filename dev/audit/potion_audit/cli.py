@@ -7,6 +7,7 @@ from pathlib import Path
 
 from .cases import CaseFileError, import_from_core, load_cases, write_case_set
 from .check import collect, write_preflight
+from .cleanup import UNRECORDED, matrix_cleanup
 from .client import ApiClient, ApiError, ApiUnreachable
 from .config import ConfigError, credentials, load_config
 from .coverage import FormReader, ModelResolver, coverage, live_state
@@ -63,6 +64,12 @@ def _parser() -> argparse.ArgumentParser:
     reevaluate = commands.add_parser("reevaluate", help="check the outputs and run reports of a run again with the current checks, without GPU or network")
     reevaluate.add_argument("runs", type=Path, nargs="+")
     reevaluate.add_argument("--pack", type=Path, default=DEFAULT_PACK)
+
+    clean = commands.add_parser("cleanup", help="list the generations of a matrix run and the files it created on the instance, delete them with --confirm")
+    clean.add_argument("runs", type=Path, nargs="+", help="the segment folders of one matrix run, each with its run.json, or the folder of its night with night.json")
+    clean.add_argument("--config", type=Path, default=Path("audit.toml"))
+    clean.add_argument("--confirm", action="store_true", help="delete what the listing attributes to the run, and write cleanup.json in each segment folder")
+    clean.add_argument(UNRECORDED, action="store_true", help="with --confirm, delete for a run that recorded no account, without checking that this is its instance")
 
     merge = commands.add_parser("merge", help="one page with a column per machine")
     merge.add_argument("runs", type=Path, nargs="+", help="run folders, night folders and scenario folders of several machines; the segments of one machine are put together, its scenario goes in its column")
@@ -129,6 +136,8 @@ def _check(args) -> int:
                 print(f"warning: {cell['id']} sends fields its form on the instance does not declare: {', '.join(cell['undeclared_fields'])}")
             if cell.get("form_error"):
                 print(f"warning: {cell['id']}: its form could not be read: {cell['form_error']}")
+            if cell.get("tier") and cell["status"] == "ready":
+                print(f"info: {cell['id']} runs from {cell['tier']['cell_min_vram_gb']} GB by its cell, below the {cell['tier']['preset_min_vram_gb']} GB its preset declares")
     for item in preflight["warnings"]:
         print(f"warning: {item}")
     for item in preflight["blocking"]:
@@ -260,6 +269,9 @@ def _report(args) -> int:
             if scenario is None:
                 raise ReportError("--compare gives a scenario, but the report has no scenario")
             scenario_comparison = compare_scenarios(scenario, load_one_scenario(old_scenarios))
+    shown = sorted({str(name) for name in ((run_set.machine if run_set else None), (previous.machine if previous else None), (scenario.machine if scenario else None), (scenario_comparison or {}).get("previous", {}).get("machine")) if name})
+    if len(shown) > 1:
+        print(f"warning: the page shows the names of {len(shown)} machines: {', '.join(shown)}", file=sys.stderr)
     index = write_report(run_set, args.out or args.runs[0] / "report", comparison, media=not args.no_media, scenario=scenario, scenario_comparison=scenario_comparison, previous=previous)
     print(f"report: {index}")
     if comparison is not None:
@@ -278,6 +290,15 @@ def _reevaluate(args) -> int:
     return EXIT_OK
 
 
+def _cleanup(args) -> int:
+    config = load_config(args.config)
+    username, password = credentials(config.target, os.environ)
+    client = ApiClient(config.target.url, config.target.timeout_seconds)
+    client.login(username, password)
+    plan = matrix_cleanup(client, list(args.runs), args.confirm, allow_unrecorded=args.allow_unrecorded_instance)
+    return EXIT_FAIL if plan["failed"] else EXIT_OK
+
+
 def _merge(args) -> int:
     matrix_dirs, scenario_dirs = split_dirs(args.runs)
     sets = [load_set(dirs) for dirs in group_by_machine(matrix_dirs).values()]
@@ -293,7 +314,7 @@ def _merge(args) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
-    handlers = {"check": _check, "run": _run, "cases": _cases, "pack": _pack, "media": _media, "report": _report, "reevaluate": _reevaluate, "merge": _merge, "vp": vp_command}
+    handlers = {"check": _check, "run": _run, "cases": _cases, "pack": _pack, "media": _media, "report": _report, "reevaluate": _reevaluate, "cleanup": _cleanup, "merge": _merge, "vp": vp_command}
     try:
         return handlers[args.command](args)
     except (ConfigError, CaseFileError, RunRefused, PackError, ReportError, ReevaluateError) as error:

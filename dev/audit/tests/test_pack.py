@@ -327,3 +327,136 @@ def test_a_model_without_sha256_is_found_by_its_file_name(fake_api, tmp_path, ca
     second = assess(pack, cell(pack, "core/SDXL:txt2img/edit"), ModelResolver(client), live)
     lora = next(model for model in second["models"] if model["field"] == "style_lora")
     assert (lora["by"], lora["model_id"]) == ("filename", "M-STYLE")
+
+
+WAN_FORM = 'form = {expert_boundary_preset = "0.875"}'
+MEASURE = 'sources = {min_vram_gb = {machine = "test-box", date = "2026-11-14", peak_vram_mb = 11000, run = "r1"}}'
+
+
+def wan_pack(tmp_path, case_file, *lines):
+    return load_pack(write_pack(tmp_path, case_file, replace={WAN_FORM: "\n".join((WAN_FORM, *lines))}))
+
+
+def wan_errors(pack):
+    return [problem.message for problem in errors(verify(pack, allow_pending=True)) if problem.where == "cell core/Wan:video"]
+
+
+def test_a_cell_that_runs_below_the_tier_of_its_preset_verifies_with_its_measure(tmp_path, case_file):
+    pack = wan_pack(tmp_path, case_file, "min_vram_gb = 12", MEASURE)
+    assert cell(pack, "core/Wan:video").min_vram_gb == 12
+    assert wan_errors(pack) == []
+
+
+@pytest.mark.parametrize(
+    ("lines", "expected"),
+    [
+        (("min_vram_gb = 12",), "min_vram_gb needs its measure in sources.min_vram_gb"),
+        (("min_vram_gb = 12", 'sources = {min_vram_gb = "measured once"}'), "min_vram_gb needs its measure in sources.min_vram_gb"),
+        (("min_vram_gb = 12", 'sources = {min_vram_gb = {machine = "test-box", peak_vram_mb = 11000}}'), "sources.min_vram_gb.date must be the date of the measure"),
+        (("min_vram_gb = 12", 'sources = {min_vram_gb = {date = "2026-11-14", peak_vram_mb = 11000}}'), "sources.min_vram_gb.machine must name the machine"),
+        (("min_vram_gb = 12", 'sources = {min_vram_gb = {machine = "test-box", date = "2026-11-14"}}'), "sources.min_vram_gb.peak_vram_mb must be the peak VRAM"),
+        (("min_vram_gb = 12", 'sources = {min_vram_gb = {machine = "test-box", date = "2026-11-14", peak_vram_mb = 13000}}'), "the measured peak of 13000 MiB is above the 12 GB"),
+        (("min_vram_gb = 12", 'sources = {min_vram_gb = {machine = "test-box", date = "2026-11-14", peak_vram_mb = 11000, gpu = "x"}}'), "sources.min_vram_gb has unknown keys: gpu"),
+        (("min_vram_gb = 16", MEASURE), "min_vram_gb 16 is not below the 16 GB that core/Wan declares"),
+        (("min_vram_gb = 0", MEASURE), "min_vram_gb must be a number of GB above 0"),
+    ],
+)
+def test_pack_verify_refuses_a_lower_tier_without_a_complete_measure(tmp_path, case_file, lines, expected):
+    found = wan_errors(wan_pack(tmp_path, case_file, *lines))
+    assert any(message.startswith(expected) for message in found), found
+
+
+def test_a_cell_runs_below_its_preset_tier_only_with_its_own_threshold(fake_api, tmp_path, case_file):
+    from potion_audit.client import ApiClient
+    from potion_audit.coverage import ModelResolver, assess, live_state
+
+    from conftest import PASSWORD, USER
+
+    client = ApiClient(fake_api.url)
+    client.login(USER, PASSWORD)
+    plain = load_pack(write_pack(tmp_path / "plain", case_file))
+    lowered = wan_pack(tmp_path / "lowered", case_file, "min_vram_gb = 12", MEASURE)
+    before = assess(plain, cell(plain, "core/Wan:video"), ModelResolver(client), live_state(client))
+    after = assess(lowered, cell(lowered, "core/Wan:video"), ModelResolver(client), live_state(client))
+    assert (before["status"], before["reason"]) == ("beyond_tier", "needs 16 GB, the GPU has 12.0 GB")
+    assert after["status"] == "ready"
+    assert after["tier"] == {"preset_min_vram_gb": 16, "cell_min_vram_gb": 12.0, "measure": {"machine": "test-box", "date": "2026-11-14", "peak_vram_mb": 11000, "run": "r1"}}
+    fake_api.vram_gb = 8.0
+    below = assess(lowered, cell(lowered, "core/Wan:video"), ModelResolver(client), live_state(client))
+    assert (below["status"], below["reason"]) == ("beyond_tier", "needs 12.0 GB by its cell, the GPU has 8.0 GB")
+
+
+def test_a_cell_allows_a_ruled_out_step_only_with_its_reason(tmp_path, case_file):
+    from potion_audit.pack import forbidden_steps, ruled_steps
+
+    bound = 'bind = {input_video = "bottle"}'
+    allowed = wan_pack(tmp_path / "a", case_file, bound, 'allowed_steps = ["txt2vid"]', 'sources = {allowed_steps = "the generator names every step TXT2VID"}')
+    wan = cell(allowed, "core/Wan:video")
+    assert (ruled_steps(wan), forbidden_steps(wan), wan.allowed_steps) == (["TXT2VID"], [], ("TXT2VID",))
+    assert wan_errors(allowed) == []
+    unexplained = wan_pack(tmp_path / "b", case_file, bound, 'allowed_steps = ["TXT2VID"]')
+    assert wan_errors(unexplained) == ["allowed_steps needs its reason in sources.allowed_steps"]
+    stray = wan_pack(tmp_path / "c", case_file, 'allowed_steps = ["TXT2IMG"]', 'sources = {allowed_steps = "none"}')
+    assert wan_errors(stray) == ["allowed_steps names TXT2IMG, which the general rule does not forbid for this cell (none)"]
+
+
+def test_the_minimax_h3_image_cells_run_from_12_gb_and_its_edit_allows_txt2img():
+    from potion_audit.pack import DEFAULT_PACK, cell_checks, forbidden_steps, ruled_steps
+
+    pack = load_pack(DEFAULT_PACK)
+    text2image = cell(pack, "core/MiniMax-H3-Image:txt2img")
+    edit = cell(pack, "core/MiniMax-H3-Image:edit")
+    assert (text2image.min_vram_gb, edit.min_vram_gb) == (12, 12)
+    assert [cell(pack, cell_id).min_vram_gb for cell_id in ("core/Pixal3D:img2mesh", "core/Pixal3D:views2mesh")] == [None, None]
+    assert (ruled_steps(edit), forbidden_steps(edit)) == (["TXT2IMG"], [])
+    assert "forbidden_steps" not in cell_checks(pack, edit)
+    assert [cell_id for cell_id in (item.id for item in pack.cells) if cell(pack, cell_id).allowed_steps] == ["core/MiniMax-H3-Image:edit"]
+    assert errors(verify(pack)) == []
+
+
+def test_reevaluate_passes_the_minimax_h3_image_edit_that_its_txt2img_step_failed(tmp_path):
+    from conftest import png_bytes
+    from potion_audit.pack import DEFAULT_PACK
+    from potion_audit.reevaluate import reevaluate_run
+
+    pack = load_pack(DEFAULT_PACK)
+    run_dir = tmp_path / "audit-4"
+    folder = run_dir / "cells" / "core-MiniMax-H3-Image--edit"
+    folder.mkdir(parents=True)
+    (folder / "0.png").write_bytes(png_bytes(size=(64, 64)))
+    history = [{"at": "2026-11-14T20:48:31+00:00", "step": "Processing <<NUMBER:1 media files:folder>>"}, {"at": "2026-11-14T20:48:32+00:00", "step": "Loaded <<NUMBER:1 files:check-circle>> (<<NUMBER:1 images:image>>, <<NUMBER:0 videos:video>>, <<NUMBER:0 audio:audio>>)"}] + [{"at": "2026-11-14T20:49:00+00:00", "step": "TXT2IMG"}] * 6
+    (folder / "run_report.json").write_text(json.dumps({"status_history": history}), encoding="utf-8")
+    failed = [{"check": "generation_step", "expected": "none of TXT2IMG", "actual": ["TXT2IMG"], "ok": False}]
+    result = {"cell": "core/MiniMax-H3-Image:edit", "verdict": "FAIL", "checks_version": 2, "final_status": {"status": "completed"}, "outputs": [{"file": "0.png", "kind": "image"}], "checks": failed, "pack": {"id": "potion-v1", "sha256": "old"}, "generation_stats": {}}
+    (folder / "result.json").write_text(json.dumps(result), encoding="utf-8")
+    (run_dir / "run.json").write_text(json.dumps({"run_id": "audit-4", "pack": {"id": "potion-v1", "sha256": "old"}, "cells": [{"cell": "core/MiniMax-H3-Image:edit", "warm_repeat": False, "verdict": "FAIL"}]}), encoding="utf-8")
+    records = reevaluate_run(run_dir, pack, lambda line: None)
+    assert [(record["previous"]["verdict"], record["verdict"]) for record in records] == [("FAIL", "PASS")]
+    assert [check["check"] for check in records[0]["checks"]] == ["min_outputs", "not_black", "media_loaded"]
+
+
+@pytest.mark.parametrize(("cell_gb", "preset_gb", "expected"), [(12, 24, (12.0, True)), (24, 24, (24, False)), (30, 24, (24, False)), ("12", 24, (24, False)), (True, 24, (24, False)), (12, None, (None, False)), (float("nan"), 24, (24, False))])
+def test_run_and_check_honour_only_a_threshold_below_a_declared_tier(pack, cell_gb, preset_gb, expected):
+    import dataclasses
+
+    from potion_audit.coverage import tier_need
+
+    wan = dataclasses.replace(cell(pack, "core/Wan:video"), min_vram_gb=cell_gb)
+    assert tier_need({"requires": {"min_vram_gb": preset_gb}}, wan) == expected
+
+
+def test_a_cell_that_binds_media_fails_when_the_run_report_names_no_media_processed():
+    from potion_audit.pack import DEFAULT_PACK, cell_checks
+    from potion_audit.run import evaluate_run_report
+
+    pack = load_pack(DEFAULT_PACK)
+    checks = cell_checks(pack, cell(pack, "core/MiniMax-H3-Image:edit"))
+    assert checks["bound_media"] == 1 and "bound_media" not in cell_checks(pack, cell(pack, "core/MiniMax-H3-Image:txt2img"))
+    found = evaluate_run_report(checks, {"status_history": [{"step": "TXT2IMG"}] * 6})
+    assert found == [{"check": "media_loaded", "expected": "the 1 media the cell binds processed and loaded", "actual": "the run report names no media file processed", "ok": False}]
+    assert evaluate_run_report({}, {"status_history": [{"step": "TXT2IMG"}]}) == []
+
+
+def test_allowed_steps_given_as_text_is_refused_with_its_own_message(tmp_path, case_file):
+    with pytest.raises(PackError, match=r"core/Wan:video: allowed_steps must be a list of step names, such as \["):
+        wan_pack(tmp_path, case_file, 'bind = {input_video = "bottle"}', 'allowed_steps = "TXT2VID"')

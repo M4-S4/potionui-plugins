@@ -3,6 +3,7 @@ import json
 import threading
 import urllib.parse
 import zipfile
+from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -69,6 +70,7 @@ class FakeApi:
         self.outcomes = []
         self.health = "healthy"
         self.history = [{"at": "2026-01-01T00:00:00+00:00", "step": "Loading model x", "message": "<<PIPE:Loading model>>"}]
+        self.media_sent = 0
         self.named_models = {}
         self.vram_gb = 12.0
         self.sdxl_modes = ["txt2img"]
@@ -76,6 +78,14 @@ class FakeApi:
         self.forms = {}
         self.raw_forms = {}
         self.plugins = [{"id": "video-producer", "version": "0.1.0", "enabled": True, "state": "enabled", "source": "marketplace"}]
+        self.library = []
+        self.account_id = "01FAKEACCOUNT"
+        self.record_extra = {}
+        self.vp_projects = {}
+        self.vp_readable = True
+        self.dedupe = False
+        self.library_readable = True
+        self.deleted = []
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), self._handler())
         self.url = f"http://127.0.0.1:{self.server.server_address[1]}"
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
@@ -85,6 +95,59 @@ class FakeApi:
 
     def _stats(self) -> dict:
         return self.stats_after if self.finished else self.stats_before
+
+    def add_file(self, filename: str, original: str, created_at: str | None = None, content: bytes | None = None, row_id: str | None = None) -> dict:
+        row = {"id": row_id or f"01F{len(self.library) + 1:04d}", "filename": filename, "original_filename": original, "media_type": "image", "created_at": created_at or datetime.now(UTC).isoformat(timespec="seconds"), "content": content}
+        self.library.append(row)
+        return row
+
+    def _history(self) -> list[dict]:
+        if not self.media_sent or any("Processing" in str(entry.get("step")) for entry in self.history):
+            return self.history
+        count = self.media_sent
+        return [{"at": "2026-01-01T00:00:00+00:00", "step": f"Processing <<NUMBER:{count} media files:folder>>"}, {"at": "2026-01-01T00:00:00+00:00", "step": f"Loaded <<NUMBER:{count} files:check-circle>>"}, *self.history]
+
+    def gone_files(self) -> set[str]:
+        return {path.rsplit("/", 1)[1] for path in self.deleted if path.startswith("/api/media/uploads/")}
+
+    def listed(self) -> list[dict]:
+        gone = self.gone_files()
+        return [row for row in self.library if row["filename"] not in gone]
+
+    def _upload(self, body: bytes) -> tuple[int, object, str]:
+        filename = multipart_filename(body)
+        content = body.split(b"\r\n\r\n", 1)[1].rsplit(b"\r\n--", 1)[0]
+        self.uploads.append(filename)
+        same = [row for row in self.listed() if self.dedupe and row["content"] == content]
+        held = max(same, key=lambda row: (row["created_at"], row["id"])) if same else None
+        if held is None:
+            stored = f"{len(self.uploads)}-{filename}"
+            held = self.add_file(stored, filename, content=content)
+        stored = held["filename"]
+        return 200, envelope({"path": f"storage/uploads/{stored}", "relative_path": f"uploads/{stored}", "url": f"/api/media/uploads/{stored}", "filename": stored, "size": len(body), "width": 64, "height": 64, "duration_seconds": None, "fps": None, "id": held["id"]}), "application/json"
+
+    def _library_page(self, query: dict) -> tuple[int, object, str]:
+        if not self.library_readable:
+            return 500, {"detail": "the library is not readable"}, "application/json"
+        limit = int((query.get("limit") or ["20"])[0])
+        offset = int((query.get("offset") or ["0"])[0])
+        rows = sorted(self.listed(), key=lambda row: (row["created_at"], row["id"]), reverse=True)
+        page = [{key: row[key] for key in ("id", "filename", "original_filename", "media_type", "created_at")} for row in rows[offset:offset + min(limit, 100)]]
+        return 200, envelope({"uploads": page, "total": len(rows), "limit": limit, "offset": offset}), "application/json"
+
+    def _files(self, method: str, path: str) -> tuple[int, object, str] | None:
+        name = path[len("/api/media/uploads/"):]
+        stored = {row["filename"] for row in self.listed()}
+        if method == "GET" and name.endswith("/info"):
+            if name[: -len("/info")] in stored:
+                return 200, envelope({"filename": name[: -len("/info")], "size": 10}), "application/json"
+            return 400, {"success": False, "error": "not_found", "message": "Uploaded file not found"}, "application/json"
+        if method == "DELETE":
+            if name not in stored:
+                return 404, {"success": False, "error": "not_found"}, "application/json"
+            self.deleted.append(path)
+            return 200, envelope({"filename": name, "deleted": True}), "application/json"
+        return None
 
     def route(self, method: str, path: str, query: dict, body: bytes, headers) -> tuple[int, object, str]:
         if path == "/api/auth/login":
@@ -99,14 +162,30 @@ class FakeApi:
         if headers.get("Authorization") != f"Bearer {TOKEN}":
             return 401, {"detail": "Not authenticated"}, "application/json"
         if path == "/api/auth/me":
-            return 200, envelope({"username": USER, "account_type": "ADMIN"}), "application/json"
+            return 200, envelope({"id": self.account_id, "username": USER, "account_type": "ADMIN", "created_at": "2026-01-01T00:00:00+00:00"}), "application/json"
         if path == "/api/plugins":
             return 200, envelope(self.plugins), "application/json"
+        if path.startswith("/api/plugins/video-producer/projects") and method == "GET":
+            if not self.vp_readable:
+                return 503, {"detail": "the plugin is restarting"}, "application/json"
+            if path == "/api/plugins/video-producer/projects":
+                return 200, envelope({"projects": [{"id": item["id"], "name": item["name"]} for item in self.vp_projects.values()]}), "application/json"
+            project = self.vp_projects.get(path.rsplit("/", 1)[1])
+            if project is not None:
+                return 200, envelope({"project": project}), "application/json"
         if path == "/api/media/upload" and method == "POST":
-            filename = multipart_filename(body)
-            self.uploads.append(filename)
-            stored = f"{len(self.uploads)}-{filename}"
-            return 200, envelope({"path": f"storage/uploads/{stored}", "relative_path": f"uploads/{stored}", "url": f"/api/media/uploads/{stored}", "filename": stored, "size": len(body), "width": 64, "height": 64, "duration_seconds": None, "fps": None, "id": f"U{len(self.uploads)}"}), "application/json"
+            return self._upload(body)
+        if path == "/api/media/uploads" and method == "GET":
+            return self._library_page(query)
+        if path.startswith("/api/media/uploads/") and method in ("GET", "DELETE"):
+            found = self._files(method, path)
+            if found:
+                return found
+        if path == "/api/generations/history/G1" and (method == "DELETE" or "/api/generations/history/G1" in self.deleted):
+            if "/api/generations/history/G1" in self.deleted:
+                return 404, {"detail": "not found"}, "application/json"
+            self.deleted.append(path)
+            return 200, envelope({"message": "Generation deleted successfully."}), "application/json"
         if path == "/api/settings":
             return 200, envelope({"profiling_enabled": False, "model_cache_scope": "preset", "s3_secret_key": "should-not-be-copied"}), "application/json"
         if path == "/api/system/gpu-profile":
@@ -160,6 +239,7 @@ class FakeApi:
             if self.outcomes:
                 self.final, self.failure = self.outcomes.pop(0)
             self.started.append(request)
+            self.media_sent = json.dumps(request.get("form_data") or {}).count("uploads/")
             return 200, envelope({"generation_id": "G1", "status": {"id": "G1", "status": "pending"}}), "application/json"
         if path == "/api/generations/G1/status":
             if self.statuses:
@@ -169,9 +249,9 @@ class FakeApi:
         if path == "/api/generations/G1/cancel" and method == "POST":
             return 200, envelope({}), "application/json"
         if path == "/api/admin/generations/G1":
-            return 200, envelope({"generation": {}, "run_report": {"pipe_timers": {"0": {"started_at": "2026-01-01T00:00:00+00:00", "ended_at": "2026-01-01T00:00:02.500000+00:00"}}, "status_history": self.history}}), "application/json"
+            return 200, envelope({"generation": {}, "run_report": {"pipe_timers": {"0": {"started_at": "2026-01-01T00:00:00+00:00", "ended_at": "2026-01-01T00:00:02.500000+00:00"}}, "status_history": self._history()}}), "application/json"
         if path == "/api/generations/history/G1":
-            return 200, envelope({"id": "G1", "run_seconds": 12, "queued_seconds": 0, "duration_ms": 12000, "has_profile": False}), "application/json"
+            return 200, envelope({"id": "G1", "run_seconds": 12, "queued_seconds": 0, "duration_ms": 12000, "has_profile": False, **self.record_extra}), "application/json"
         if path == "/api/generations/history/G1/export-bundle":
             return 200, bundle_bytes(self.outputs), "application/zip"
         if path == "/api/generations/G1/failure":
@@ -207,6 +287,9 @@ class FakeApi:
 
             def do_POST(self):
                 self._serve("POST")
+
+            def do_DELETE(self):
+                self._serve("DELETE")
 
         return Handler
 

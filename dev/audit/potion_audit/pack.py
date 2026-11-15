@@ -20,11 +20,14 @@ TEMPLATE_FIELD = re.compile(r"\{([a-z0-9_]+)\}")
 BARE_KEY = re.compile(r"[A-Za-z0-9_-]+")
 SAFE_KEY = re.compile(r"[^A-Za-z0-9._-]+")
 PATH_STEP = re.compile(r"([A-Za-z0-9_]+)((?:\[[0-9]+\])*)")
+ISO_DATE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
 DEFAULT_PACK = Path(__file__).resolve().parent.parent / "pack" / "v1" / "pack.toml"
 CELL_KEYS = {
     "preset", "mode", "variant", "case", "fix", "prompt", "negative", "seed", "form", "drop", "bind", "models",
     "drop_models", "models_from", "profiles", "repeat_warm", "requires_plugin", "checks", "sources", "exclude", "notes",
+    "min_vram_gb", "allowed_steps",
 }
+MEASURE_KEYS = {"machine", "date", "peak_vram_mb", "run", "note"}
 MAKE_KEYS = CELL_KEYS | {"method", "op", "from", "params", "output", "license"}
 INPUT_KEYS = {"file", "kind", "width", "height", "seconds", "sha256", "size_bytes", "license", "origin", "make"}
 
@@ -65,6 +68,8 @@ class Cell:
     exclude: str | None
     notes: str | None
     position: int
+    min_vram_gb: float | None = None
+    allowed_steps: tuple[str, ...] = ()
 
     @property
     def id(self) -> str:
@@ -165,6 +170,9 @@ def _cell(raw: dict, case_set: CaseSet, position: int, keys: set[str]) -> Cell:
     if preset is None:
         raise PackError(f"cell {ref}:{raw.get('mode')}: no preset {ref!r} in {case_set.path.name}")
     profiles = tuple(raw.get("profiles") or ())
+    allowed = raw.get("allowed_steps") or []
+    if not isinstance(allowed, list):
+        raise PackError(f"cell {ref}:{raw.get('mode')}: allowed_steps must be a list of step names, such as [\"TXT2IMG\"], got {allowed!r}")
     return Cell(
         preset_ref=preset_ref(preset),
         preset_id=preset["id"],
@@ -190,6 +198,8 @@ def _cell(raw: dict, case_set: CaseSet, position: int, keys: set[str]) -> Cell:
         exclude=raw.get("exclude"),
         notes=raw.get("notes"),
         position=position,
+        min_vram_gb=raw.get("min_vram_gb"),
+        allowed_steps=tuple(str(step).upper() for step in allowed),
     )
 
 
@@ -400,13 +410,17 @@ def flatten_media(form: dict) -> dict:
     return {key: value["path"] if isinstance(value, dict) and "path" in value and "modelPath" not in value else value for key, value in form.items()}
 
 
-def forbidden_steps(cell: Cell) -> list[str]:
+def ruled_steps(cell: Cell) -> list[str]:
     steps = []
     if cell.mode in IMAGE_SOURCE_MODES:
         steps.append("TXT2IMG")
     if any(path.split(".")[0].split("[")[0] in VIDEO_SOURCE_FIELDS for path in cell.bind):
         steps.append("TXT2VID")
     return steps
+
+
+def forbidden_steps(cell: Cell) -> list[str]:
+    return [step for step in ruled_steps(cell) if step not in cell.allowed_steps]
 
 
 def build_cell_request(pack: Pack, cell: Cell, model_ids: dict[str, str], preset_detail: dict, run_id: str, media: Callable[[str, bool], object]) -> dict:
@@ -450,6 +464,8 @@ def cell_checks(pack: Pack, cell: Cell) -> dict:
     steps = forbidden_steps(cell)
     if steps:
         checks["forbidden_steps"] = steps
+    if cell.bind:
+        checks["bound_media"] = len(cell.bind)
     return checks
 
 
@@ -587,11 +603,58 @@ def _verify_cell(pack: Pack, cell: Cell, problems: list[Problem], where: str) ->
             problems.append(Problem("error", where, f"model {field}: {value!r} is not a sha256"))
     if cell.status == "new" and not cell.sources:
         problems.append(Problem("error", where, "a new case must say where its settings come from (sources)"))
+    _verify_tier(preset, cell, problems, where)
+    _verify_allowed_steps(cell, problems, where)
     try:
         cell_models(pack, cell)
         build_cell_request(pack, cell, {}, {}, "verify", dry_media)
     except PackError as error:
         problems.append(Problem("error", where, str(error)))
+
+
+def _number(value) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0
+
+
+def _verify_tier(preset: dict, cell: Cell, problems: list[Problem], where: str) -> None:
+    if cell.min_vram_gb is None:
+        return
+    if not _number(cell.min_vram_gb):
+        problems.append(Problem("error", where, f"min_vram_gb must be a number of GB above 0, got {cell.min_vram_gb!r}"))
+        return
+    tier = preset.get("min_vram_gb")
+    if not _number(tier):
+        problems.append(Problem("error", where, f"min_vram_gb {cell.min_vram_gb} lowers no tier: {cell.preset_ref} declares no min_vram_gb"))
+    elif cell.min_vram_gb >= tier:
+        problems.append(Problem("error", where, f"min_vram_gb {cell.min_vram_gb} is not below the {tier} GB that {cell.preset_ref} declares"))
+    measure = cell.sources.get("min_vram_gb")
+    if not isinstance(measure, dict):
+        problems.append(Problem("error", where, "min_vram_gb needs its measure in sources.min_vram_gb: {machine, date, peak_vram_mb}"))
+        return
+    unknown = sorted(set(measure) - MEASURE_KEYS)
+    if unknown:
+        problems.append(Problem("error", where, f"sources.min_vram_gb has unknown keys: {', '.join(unknown)}"))
+    if not isinstance(measure.get("machine"), str) or not measure["machine"].strip():
+        problems.append(Problem("error", where, "sources.min_vram_gb.machine must name the machine of the measure"))
+    if not isinstance(measure.get("date"), str) or not ISO_DATE.fullmatch(measure["date"]):
+        problems.append(Problem("error", where, "sources.min_vram_gb.date must be the date of the measure, YYYY-MM-DD"))
+    peak = measure.get("peak_vram_mb")
+    if not _number(peak):
+        problems.append(Problem("error", where, "sources.min_vram_gb.peak_vram_mb must be the peak VRAM of the measure, in MiB"))
+    elif peak > cell.min_vram_gb * 1024:
+        problems.append(Problem("error", where, f"the measured peak of {peak} MiB is above the {cell.min_vram_gb} GB of min_vram_gb"))
+
+
+def _verify_allowed_steps(cell: Cell, problems: list[Problem], where: str) -> None:
+    if not cell.allowed_steps:
+        return
+    ruled = ruled_steps(cell)
+    for step in cell.allowed_steps:
+        if step not in ruled:
+            problems.append(Problem("error", where, f"allowed_steps names {step}, which the general rule does not forbid for this cell ({', '.join(ruled) or 'none'})"))
+    reason = cell.sources.get("allowed_steps")
+    if not isinstance(reason, str) or not reason.strip():
+        problems.append(Problem("error", where, "allowed_steps needs its reason in sources.allowed_steps"))
 
 
 def verify(pack: Pack, allow_pending: bool = False) -> list[Problem]:
