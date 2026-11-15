@@ -15,7 +15,7 @@ from .media import THUMB_SIDE, media_ssim, write_display_image, write_preview, w
 from .pack import Pack, included
 from .plan import cell_folder
 from .reevaluate import REEVALUATED, load_run_json, ReevaluateError
-from .vp_report import COLUMNS, ReportError, Scenario, VpStep, scenario_json
+from .vp_report import COLUMNS, ReportError, Scenario, VpStep, pack_change, pack_line, scenario_json
 
 REPORT_SCHEMA = 1
 DURATION_TOLERANCE = 0.20
@@ -639,6 +639,23 @@ def _change(after, before) -> float | None:
     return round((after - before) / before, 3)
 
 
+def _stable(node):
+    if isinstance(node, dict):
+        return {key: _stable(value) for key, value in node.items() if key != "url"}
+    if isinstance(node, list):
+        return [_stable(value) for value in node]
+    if isinstance(node, str) and "uploads/" in node:
+        return "<upload>"
+    return node
+
+
+def request_changed(now: dict | None, then: dict | None) -> bool | None:
+    if not now or not then:
+        return None
+    return _stable({key: now.get(key) for key in ("mode", "prompts", "form_data")}) != _stable({key: then.get(key) for key in ("mode", "prompts", "form_data")})
+
+
+
 def _first_media(entry: Entry) -> dict | None:
     outputs = (entry.result or {}).get("outputs") or []
     return outputs[0] if outputs else None
@@ -666,13 +683,7 @@ def _ssim(current: Entry, previous: Entry) -> dict:
 
 
 def compare_sets(current: RunSet, previous: RunSet) -> dict:
-    mine = current.pack
-    theirs = previous.pack
-    if mine.get("id") != theirs.get("id") or mine.get("sha256") != theirs.get("sha256"):
-        raise ReportError(
-            f"compare needs two runs of the same pack: this run has {mine.get('id')} {str(mine.get('sha256'))[:12]}, "
-            f"the other {theirs.get('id')} {str(theirs.get('sha256'))[:12]}"
-        )
+    changed_pack = pack_change(current.pack, previous.pack, "runs")
     before = {entry.key: entry for entry in previous.entries}
     rows = []
     only_here = []
@@ -701,6 +712,7 @@ def compare_sets(current: RunSet, previous: RunSet) -> dict:
                 "vram_change_mb": vram,
                 "vram_flag": vram is not None and abs(vram) > VRAM_TOLERANCE_MB,
                 "ssim": _ssim(entry, old) if entry.result and old.result else {"value": None, "reason": "no output on one side"},
+                "request_changed": request_changed(entry.request, old.request),
             }
         )
     missing = [key for key in before if key not in {entry.key for entry in current.entries}]
@@ -717,6 +729,7 @@ def compare_sets(current: RunSet, previous: RunSet) -> dict:
             hardware.append(f"{label}: {then} then, {now} now")
     return {
         "previous": {"runs": [run.get("run_id") for run in previous.runs], "started_at": previous.started_at, "app_version": previous.first.get("app_version")},
+        "pack_change": changed_pack,
         "rows": rows,
         "only_in_previous": missing,
         "only_in_this_run": only_here,
@@ -1146,18 +1159,22 @@ def _compare_html(comparison: dict, run_set: RunSet | None = None, previous: Run
     parts = [f"<p>Against {escape(', '.join(str(run) for run in previous_run['runs']))} (application {escape(str(previous_run['app_version']))}, started {escape(_when(previous_run['started_at']))}). Durations are flagged beyond ±{DURATION_TOLERANCE:.0%}, peak VRAM beyond ±{VRAM_TOLERANCE_MB:.0f} MiB. SSIM compares outputs of the same seed and size (1.0 is identical).</p>"]
     for line in comparison["hardware_changes"]:
         parts.append(f'<p class="note warn">Hardware changed: {escape(line)}</p>')
+    if comparison.get("pack_change"):
+        changed = sum(1 for row in comparison["rows"] if row.get("request_changed"))
+        parts.append(f'<p class="note warn">Changed: {escape(pack_line(comparison["pack_change"]))}. The cells are matched by their id; {changed} of the {len(comparison["rows"])} cells of both runs sent another request, and are marked: their run time and VRAM measure other work.</p>')
     rows = []
     for row in comparison["rows"]:
         interesting = row.get("verdict_changed") or row.get("duration_flag") or row.get("vram_flag") or ((row.get("ssim") or {}).get("value") is not None and row["ssim"]["value"] < SSIM_FLAG)
         if not interesting:
             continue
+        marked = ' <span class="tag warn">request changed</span>' if row.get("request_changed") else ""
         ssim = row.get("ssim") or {}
         duration = row.get("duration_change")
         verdict = f'<span class="tag {VERDICT_CLASS.get(str(row.get("verdict")), "idle")}">{escape(str(row.get("verdict")))}</span>'
         if row.get("verdict_changed"):
             verdict = f'<span class="was">{escape(str(row.get("previous_verdict")))}</span> → {verdict}'
         rows.append([
-            f'<a href="#{row["slug"]}">{escape(row["cell"])}</a>',
+            f'<a href="#{row["slug"]}">{escape(row["cell"])}</a>{marked}',
             verdict,
             escape(f"{_seconds(row.get('previous_run_seconds'))} → {_seconds(row.get('run_seconds'))}"),
             escape(f"{duration:+.0%}" if duration is not None else ""),
@@ -1313,6 +1330,8 @@ def _summary(run_set: RunSet | None, comparison: dict | None, scenario: Scenario
                 (sum(1 for row in rows if row.get("duration_flag")), f"run time beyond ±{DURATION_TOLERANCE:.0%}"),
                 (sum(1 for row in rows if row.get("vram_flag")), f"peak VRAM beyond ±{VRAM_TOLERANCE_MB:.0f} MiB"),
             ]
+            if comparison.get("pack_change"):
+                flags.append((sum(1 for row in rows if row.get("request_changed")), "another request than under pack " + str(comparison["pack_change"]["previous"].get("version"))))
             body += "<p>Cells with " + escape(" · ".join(f"{label}: {count}" for count, label in flags)) + '. <a href="#compare">See the comparison</a>.</p>'
         regressed = len(found["regressed"])
         tiles.append(f'<div class="tile wide {"t-bad" if regressed else "t-ok"}"><div class="label">Against {escape(" and ".join(against))}</div>{body}</div>')

@@ -181,7 +181,12 @@ def test_compare_flags_a_changed_step_of_two_scenarios_and_refuses_another_pack(
     assert "Compared with the previous scenario" in page and "PASS → FAIL" in page
     assert "compare scenario: 1 verdicts changed, 1 durations beyond 20 %, 0 takes on another preset" in capsys.readouterr().out
     other = read(old / "scenario.json")
-    other["pack"]["sha256"] = "0" * 64
+    other["pack"].update(sha256="0" * 64, version="1.0.0")
+    write(old / "scenario.json", other)
+    changed = compare_scenarios(load_scenario(new), load_scenario(old))
+    assert changed["pack_change"]["previous"]["version"] == "1.0.0"
+    assert f"pack: potion-v1 1.0.0 (000000000000) then, {scenario['pack']['version']} ({scenario['pack']['sha256'][:12]}) now" in changed["changes"]
+    other["pack"]["id"] = "potion-other"
     write(old / "scenario.json", other)
     with pytest.raises(ReportError, match="same pack"):
         compare_scenarios(load_scenario(new), load_scenario(old))
