@@ -12,7 +12,7 @@
 		</button>
 	</div>
 	{#if refusal.lines.length}
-		<ul class="space-y-0.5 font-mono">
+		<ul class="space-y-0.5 break-all font-mono">
 			{#each refusal.lines as line, position (position)}
 				<li>{line}</li>
 			{/each}

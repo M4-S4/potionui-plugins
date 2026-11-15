@@ -47,6 +47,7 @@ test('deleting a file asks the server first, then shows a refusal or the confirm
 test('the refusal notice stays until it is closed and lists one file per line', () => {
 	const source = read('RefusalNotice.svelte');
 	assert.match(source, /role="alert"/);
+	assert.match(source, /<ul class="[^"]*break-all[^"]*">/);
 	assert.match(source, /\{#each refusal\.lines as line, position \(position\)\}\s*<li>\{line\}<\/li>/);
 	assert.match(source, /onclick=\{onClose\}/);
 	assert.doesNotMatch(source, /setTimeout|toast/);
