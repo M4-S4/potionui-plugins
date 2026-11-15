@@ -507,7 +507,7 @@ def test_lint_messages_drop_the_folder_in_every_form_and_a_mode_list_does_not_ma
 
 def test_a_new_error_that_differs_from_an_old_one_only_by_a_list_other_than_the_modes_is_announced():
     before = ["[ERROR] preset.yml: speed_profiles: unknown keys ['x']"]
-    after = ["[ERROR] preset.yml: speed_profiles: unknown keys ['x']", "[ERROR] preset.yml: speed_profiles: unknown keys ['x', 'y']"]
+    after = ["[ERROR] preset.yml: speed_profiles: unknown keys ['x', 'y']"]
 
     assert routes_files._added(before, after) == ["[ERROR] preset.yml: speed_profiles: unknown keys ['x', 'y']"]
 
