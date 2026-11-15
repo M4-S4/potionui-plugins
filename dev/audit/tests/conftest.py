@@ -81,6 +81,8 @@ class FakeApi:
         self.library = []
         self.account_id = "01FAKEACCOUNT"
         self.record_extra = {}
+        self.vp_projects = {}
+        self.vp_readable = True
         self.dedupe = False
         self.library_readable = True
         self.deleted = []
@@ -163,6 +165,14 @@ class FakeApi:
             return 200, envelope({"id": self.account_id, "username": USER, "account_type": "ADMIN", "created_at": "2026-01-01T00:00:00+00:00"}), "application/json"
         if path == "/api/plugins":
             return 200, envelope(self.plugins), "application/json"
+        if path.startswith("/api/plugins/video-producer/projects") and method == "GET":
+            if not self.vp_readable:
+                return 503, {"detail": "the plugin is restarting"}, "application/json"
+            if path == "/api/plugins/video-producer/projects":
+                return 200, envelope({"projects": [{"id": item["id"], "name": item["name"]} for item in self.vp_projects.values()]}), "application/json"
+            project = self.vp_projects.get(path.rsplit("/", 1)[1])
+            if project is not None:
+                return 200, envelope({"project": project}), "application/json"
         if path == "/api/media/upload" and method == "POST":
             return self._upload(body)
         if path == "/api/media/uploads" and method == "GET":

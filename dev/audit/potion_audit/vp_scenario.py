@@ -12,7 +12,7 @@ import numpy as np
 from PIL import Image
 
 from .check import runner_info
-from .cleanup import FAILURES, UNRECORDED, account_identity, attribute, candidate, chain_frame, check_generation, clock_margin, delete_all, delete_generation, delete_upload, export_media, failed_item, generation_on_instance, guard, library, library_mark, log_files, log_generations, merge, recorded_uploads, refuse_cleaned, run_span, save_trace, split, tally, trace_path
+from .cleanup import FAILURES, UNRECORDED, account_identity, attribute, candidate, chain_frame, check_generation, clock_margin, delete_all, delete_generation, delete_upload, export_media, failed_item, first_save, generation_on_instance, guard, keep_referenced, last_save, library, library_mark, log_files, log_generations, merge, project_references, recorded_uploads, refuse_cleaned, run_span, save_trace, split, tally, trace_path
 from .client import ApiClient, ApiError, unwrap
 from .config import load_config, credentials
 from .inputs import Uploads
@@ -1162,6 +1162,10 @@ def cleanup(client: ApiClient, run_dir: Path, confirm: bool, log: Callable[[str]
             for item in files:
                 if item["filename"] in record["filenames"] and item["attributed"]:
                     item.update(attributed=False, proof=f"the project {record['project_id']} that uses it is kept: {record['kept']}")
+    references, unread = project_references(client, rows, {item["id"] for item in project_items if item["attributed"] and item["on_instance"]})
+    keep_referenced(files, references, unread)
+    if unread:
+        notes.append(unread + ", so the files of the run are kept")
     generations = []
     for record in records:
         for generation_id, preset_id in record["generations"].items():
@@ -1199,11 +1203,11 @@ def cleanup(client: ApiClient, run_dir: Path, confirm: bool, log: Callable[[str]
     def save() -> None:
         save_trace(path, plan)
 
-    save()
+    first_save(save)
     stopped = delete_all(client, [(delete_project, item) for item in doomed_projects] + [(delete_generation, item) for item in doomed] + [(delete_upload, item) for item in delete], save)
     counts = {"projects": tally(doomed_projects), "generations": tally(doomed), "files": tally(delete)}
     plan.update(state="stopped" if stopped else "done", stopped=stopped, counts=counts, done_at=datetime.now(UTC).isoformat(timespec="seconds"), failed=bool(stopped) or any(value["not_deleted"] or value["not_tried"] for value in counts.values()))
-    save()
+    last_save(save, plan, log)
     log(f"{run_id}: {counts['projects']['deleted']} of {len(doomed_projects)} projects, {counts['generations']['deleted']} of {len(doomed)} generations and {counts['files']['deleted']} of {len(delete)} files deleted; not deleted: {sum(value['not_deleted'] for value in counts.values())}; not tried: {sum(value['not_tried'] for value in counts.values())}; not attributed and kept: {len(kept_projects)} projects, {len(spared)} generations, {len(kept)} files" + (f"; {stopped}" if stopped else ""))
     return plan
 

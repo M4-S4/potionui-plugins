@@ -752,3 +752,14 @@ def test_the_frames_of_the_flf_shot_are_frozen_inputs_of_the_pack():
     for input_id in shot["frames"]:
         spec = pack.inputs[input_id]
         assert spec.kind == "image" and len(spec.sha256) == 64 and pack.input_path(input_id).is_file()
+
+
+def test_vp_cleanup_keeps_a_file_that_another_project_points_to(vp_api, tmp_path):
+    run_dir = run_five(vp_api, tmp_path, "vp-14")
+    lumi = next(row for row in vp_api.library if row["filename"] == "1-lumi.jpg")
+    vp_api.projects["P9"] = {"id": "P9", "name": "my film", "version": 1, "doc": {"assets": [{"id": "a1", "origin": {"kind": "library", "itemId": lumi["id"]}}]}}
+    plan = cleanup(logged_in(vp_api), run_dir, True, quiet)
+    found = {item["filename"]: item for item in plan["files"]}
+    assert (found["1-lumi.jpg"]["attributed"], found["1-lumi.jpg"]["proof"]) == (False, "the document of the Video Producer project P9 points to it")
+    assert f"{VP}/projects/P1" in vp_api.deleted and "/api/media/uploads/1-lumi.jpg" not in vp_api.deleted
+    assert "/api/media/uploads/2-bottle.jpg" in vp_api.deleted

@@ -352,3 +352,76 @@ def test_the_fake_server_reuses_the_newest_file_with_the_same_bytes(fake_api, tm
     fake_api.add_file("newer.png", "bottle.png", "2026-02-01T00:00:00+00:00", data, "01B")
     run_dir = segment(fake_api, pack, tmp_path, "seg-15")
     assert next(iter(recorded(run_dir).values()))["filename"] == "newer.png"
+
+
+def test_a_matrix_cleanup_keeps_a_file_that_a_video_producer_project_points_to(fake_api, tmp_path, case_file):
+    pack = made_pack(tmp_path, case_file)
+    run_dir = segment(fake_api, pack, tmp_path, "seg-16")
+    bottle = next(row for row in fake_api.library if row["filename"] == "1-bottle.png")
+    fake_api.vp_projects["P5"] = {"id": "P5", "name": "my film", "version": 3, "doc": {"assets": [{"id": "a1", "origin": {"kind": "library", "itemId": bottle["id"]}}]}}
+    lines = []
+    plan = matrix_cleanup(logged_in(fake_api), [run_dir], True, lines.append)
+    assert files_of(plan) == [("1-bottle.png", False, True), ("2-mask.png", True, True)]
+    assert plan["files"][0]["proof"] == "the document of the Video Producer project P5 points to it"
+    assert "/api/media/uploads/1-bottle.png" not in fake_api.deleted and "/api/media/uploads/2-mask.png" in fake_api.deleted
+    trace = json.loads((run_dir / "cleanup.json").read_text(encoding="utf-8"))
+    assert trace["files"][0]["proof"] == "the document of the Video Producer project P5 points to it"
+
+
+def test_a_matrix_cleanup_keeps_every_file_when_the_video_producer_projects_cannot_be_read(fake_api, tmp_path, case_file):
+    pack = made_pack(tmp_path, case_file)
+    run_dir = segment(fake_api, pack, tmp_path, "seg-17")
+    fake_api.vp_readable = False
+    lines = []
+    plan = matrix_cleanup(logged_in(fake_api), [run_dir], True, lines.append)
+    assert files_of(plan) == [("1-bottle.png", False, True), ("2-mask.png", False, True)]
+    assert plan["files"][0]["proof"].startswith("the Video Producer projects of the account could not be read (GET /api/plugins/video-producer/projects answered HTTP 503")
+    assert any(line.startswith("the Video Producer projects of the account could not be read") and line.endswith(", so the files of the run are kept") for line in lines)
+    assert [path for path in fake_api.deleted if "/media/" in path] == []
+
+
+def test_a_trace_that_cannot_be_written_stops_the_deletions_and_names_its_part_file(fake_api, config_file, credentials_env, tmp_path, case_file, monkeypatch, capsys):
+    import pathlib
+
+    import potion_audit.cleanup as cleanup_module
+
+    pack = made_pack(tmp_path, case_file)
+    run_dir = segment(fake_api, pack, tmp_path, "seg-18")
+    monkeypatch.setattr(cleanup_module, "TRACE_PAUSE_SECONDS", 0)
+    replace = pathlib.Path.replace
+    calls = []
+
+    def held(self, target):
+        if pathlib.Path(target).name == "cleanup.json":
+            calls.append(1)
+            if len(calls) > 1:
+                raise PermissionError(13, "The process cannot access the file because it is being used by another process")
+        return replace(self, target)
+
+    monkeypatch.setattr(pathlib.Path, "replace", held)
+    assert main(["cleanup", str(run_dir), "--config", str(config_file), "--confirm"]) == 1
+    assert fake_api.deleted == ["/api/generations/history/G1"]
+    out = capsys.readouterr().out
+    assert f"the trace cleanup.json could not be written after 3 attempts" in out and "cleanup.json.part holds the latest state written" in out
+    assert len(calls) == 1 + 3 + 3
+    assert json.loads((run_dir / "cleanup.json").read_text(encoding="utf-8"))["state"] == "deleting"
+    last = json.loads((run_dir / "cleanup.json.part").read_text(encoding="utf-8"))
+    assert last["state"] == "stopped" and last["generations"][0]["exists_after"] is False
+
+
+def test_a_trace_that_cannot_be_written_at_all_deletes_nothing(fake_api, tmp_path, case_file, monkeypatch):
+    import pathlib
+
+    import potion_audit.cleanup as cleanup_module
+
+    pack = made_pack(tmp_path, case_file)
+    run_dir = segment(fake_api, pack, tmp_path, "seg-19")
+    monkeypatch.setattr(cleanup_module, "TRACE_PAUSE_SECONDS", 0)
+
+    def held(self, target):
+        raise PermissionError(13, "Access is denied")
+
+    monkeypatch.setattr(pathlib.Path, "replace", held)
+    with pytest.raises(RunRefused, match="nothing was deleted: the trace cleanup.json could not be written"):
+        matrix_cleanup(logged_in(fake_api), [run_dir], True, quiet)
+    assert fake_api.deleted == []

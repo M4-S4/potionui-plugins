@@ -1,4 +1,5 @@
 import json
+import time
 import urllib.parse
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
@@ -16,6 +17,14 @@ MARGIN_FLOOR_SECONDS = 60.0
 STOPPING = {401, 403}
 FAILURES = (ApiError, ApiUnreachable, ValueError)
 UNRECORDED = "--allow-unrecorded-instance"
+VP_ROUTE = "/api/plugins/video-producer"
+VP_PLUGIN = "video-producer"
+TRACE_ATTEMPTS = 3
+TRACE_PAUSE_SECONDS = 0.5
+
+
+class TraceError(RuntimeError):
+    pass
 
 
 def instant(text) -> datetime | None:
@@ -286,11 +295,29 @@ def delete_all(client: ApiClient, steps: list, save: Callable[[], None]) -> str 
             item["skipped"] = stopped
             continue
         error = act(client, item)
-        save()
+        try:
+            save()
+        except TraceError as problem:
+            stopped = f"not tried: the cleanup stopped because {problem}"
+            continue
         if error is not None and fatal(error):
             stopped = f"not tried: the cleanup stopped after {item['error']}"
-    save()
     return stopped
+
+
+def first_save(save: Callable[[], None]) -> None:
+    try:
+        save()
+    except TraceError as problem:
+        raise RunRefused(f"nothing was deleted: {problem}") from None
+
+
+def last_save(save: Callable[[], None], plan: dict, log: Callable[[str], None]) -> None:
+    try:
+        save()
+    except TraceError as problem:
+        plan.update(trace_error=str(problem), failed=True)
+        log(f"error: {problem}")
 
 
 def tally(items: list[dict]) -> dict:
@@ -314,8 +341,50 @@ def trace_path(run_dir: Path) -> Path:
 
 def save_trace(path: Path, data: dict) -> None:
     partial = path.with_name(path.name + ".part")
-    partial.write_text(json.dumps(data, indent=1, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
-    partial.replace(path)
+    text = json.dumps(data, indent=1, ensure_ascii=False) + "\n"
+    last = None
+    for attempt in range(TRACE_ATTEMPTS):
+        try:
+            partial.write_text(text, encoding="utf-8", newline="\n")
+            partial.replace(path)
+            return
+        except OSError as error:
+            last = error
+            if attempt + 1 < TRACE_ATTEMPTS:
+                time.sleep(TRACE_PAUSE_SECONDS)
+    raise TraceError(f"the trace {path.name} could not be written after {TRACE_ATTEMPTS} attempts ({last}); {partial} holds the latest state written")
+
+
+def project_references(client: ApiClient, rows: dict[str, dict], skip: set[str] | frozenset = frozenset()) -> tuple[dict[str, list[str]], str | None]:
+    by_id = {str(row["id"]): name for name, row in rows.items() if row.get("id")}
+    found = {}
+    try:
+        plugins = unwrap(client.get_json("/api/plugins")) or []
+        if not any(isinstance(plugin, dict) and plugin.get("id") == VP_PLUGIN for plugin in plugins):
+            return {}, None
+        listed = (unwrap(client.get_json(f"{VP_ROUTE}/projects")) or {}).get("projects") or []
+        for entry in listed:
+            project_id = str((entry or {}).get("id") or "")
+            if not project_id or project_id in skip:
+                continue
+            project = (unwrap(client.get_json(f"{VP_ROUTE}/projects/{project_id}")) or {}).get("project") or {}
+            for asset in (project.get("doc") or {}).get("assets") or ():
+                origin = asset.get("origin") if isinstance(asset, dict) else None
+                if isinstance(origin, dict) and origin.get("kind") == "library" and str(origin.get("itemId")) in by_id:
+                    found.setdefault(by_id[str(origin["itemId"])], []).append(project_id)
+    except FAILURES as error:
+        return {}, f"the Video Producer projects of the account could not be read ({str(error) or type(error).__name__})"
+    return found, None
+
+
+def keep_referenced(files: list[dict], references: dict[str, list[str]], error: str | None) -> None:
+    for item in files:
+        if not item["attributed"] or not item["on_instance"]:
+            continue
+        if error:
+            item.update(attributed=False, proof=f"{error}: a project may point to it")
+        elif item["filename"] in references:
+            item.update(attributed=False, proof=f"the document of the Video Producer project {', '.join(dict.fromkeys(references[item['filename']]))} points to it")
 
 
 def log_files(items: list[dict], log: Callable[[str], None]) -> None:
@@ -418,6 +487,10 @@ def matrix_cleanup(client: ApiClient, run_dirs: list[Path], confirm: bool, log: 
         for item in segment["files"]:
             merge(merged, item)
     files = [attribute(item, rows, clock["margin_seconds"]) for item in merged.values()]
+    references, unread = project_references(client, rows)
+    keep_referenced(files, references, unread)
+    if unread:
+        notes.append(unread + ", so the files of the run are kept")
     generations = []
     for segment in segments:
         for item in segment["generations"]:
@@ -449,12 +522,12 @@ def matrix_cleanup(client: ApiClient, run_dirs: list[Path], confirm: bool, log: 
         for path, trace in traces:
             save_trace(path, trace)
 
-    save()
+    first_save(save)
     stopped = delete_all(client, [(delete_generation, item) for item in doomed] + [(delete_upload, item) for item in delete], save)
     counts = {"generations": tally(doomed), "files": tally(delete)}
     plan.update(traces=[str(path) for path, _ in traces], stopped=stopped, counts=counts, failed=bool(stopped) or any(value["not_deleted"] or value["not_tried"] for value in counts.values()))
     for _, trace in traces:
         trace.update(state="stopped" if stopped else "done", stopped=stopped, counts=counts, done_at=datetime.now(UTC).isoformat(timespec="seconds"))
-    save()
+    last_save(save, plan, log)
     log(f"{names}: {counts['generations']['deleted']} of {len(doomed)} generations and {counts['files']['deleted']} of {len(delete)} files deleted; not deleted: {counts['generations']['not_deleted']} generations, {counts['files']['not_deleted']} files; not tried: {counts['generations']['not_tried'] + counts['files']['not_tried']}; {len(kept)} files and {len(spared)} generations not attributed are kept" + (f"; {stopped}" if stopped else ""))
     return plan
