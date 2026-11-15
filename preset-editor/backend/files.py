@@ -15,6 +15,7 @@ MODE_NAME_RE = re.compile(r"^[a-z][a-z0-9_]{0,39}$")
 PRESET_PATH_RE = r"\{\{\s*paths\.preset\s*\}\}/"
 YAML_EXTENSIONS = frozenset({".yml", ".yaml"})
 POINTER_KEY = "pipeline_from"
+PARSE_ERRORS = (yaml.YAMLError, RecursionError, ValueError)
 
 
 class FilesError(Exception):
@@ -110,13 +111,9 @@ def delete_file(draft_dir: Path, value: str) -> Dict[str, Any]:
         raise FilesError("invalid_request", "preset.yml cannot be deleted")
     if not target.is_file():
         raise FilesError("not_found", f"no file {relative}")
-    pointers, loaders = file_citations(draft_dir, str(relative))
-    if pointers or loaders:
-        raise FilesError(
-            "conflict",
-            citation_message(f"{relative} cannot be deleted", pointers, loaders, ("loads it", "load it")),
-            citing=sorted(pointers + loaders),
-        )
+    refusal = deletion_refusal(draft_dir, str(relative))
+    if refusal is not None:
+        raise FilesError("conflict", refusal.pop("message"), **refusal)
     target.unlink()
     parent = target.parent
     while parent != draft_dir.resolve() and parent.is_dir() and not any(parent.iterdir()):
@@ -168,15 +165,38 @@ def check_mode_name(value: str) -> str:
     return value
 
 
+def _parse(text: str) -> Tuple[bool, Any]:
+    try:
+        return True, yaml.safe_load(text)
+    except PARSE_ERRORS:
+        return False, None
+
+
+def _strings(data: Any) -> List[str]:
+    found, seen, stack = [], set(), [data]
+    while stack:
+        item = stack.pop()
+        if isinstance(item, str):
+            found.append(item)
+        elif isinstance(item, (dict, list)) and id(item) not in seen:
+            seen.add(id(item))
+            stack.extend([*item.keys(), *item.values()] if isinstance(item, dict) else item)
+    return found
+
+
 def _points_at(path: Path, draft_dir: Path, text: str, mode: str) -> bool:
     relative = path.relative_to(draft_dir).parts
     if len(relative) != 3 or relative[0] != "modes" or relative[2] != "pipeline.yml" or POINTER_KEY not in text:
         return False
-    try:
-        data = yaml.safe_load(text)
-    except yaml.YAMLError:
+    parsed, data = _parse(text)
+    return parsed and isinstance(data, dict) and data.get(POINTER_KEY) == mode
+
+
+def _cites(pattern: "re.Pattern[str]", text: str, whole: bool) -> bool:
+    if not pattern.search(text):
         return False
-    return isinstance(data, dict) and data.get(POINTER_KEY) == mode
+    parsed, data = _parse(text) if whole else (False, None)
+    return not parsed or any(pattern.search(value) for value in _strings(data))
 
 
 def _yaml_files(draft_dir: Path, skip: Optional[Path] = None):
@@ -185,17 +205,19 @@ def _yaml_files(draft_dir: Path, skip: Optional[Path] = None):
             continue
         if skip is not None and (path == skip or skip in path.parents):
             continue
-        yield path, path.read_text(encoding="utf-8", errors="replace")
+        with path.open("rb") as handle:
+            data = handle.read(MAX_TEXT_BYTES + 1)
+        yield path, data[:MAX_TEXT_BYTES].decode("utf-8", errors="replace"), len(data) <= MAX_TEXT_BYTES
 
 
 def mode_citations(draft_dir: Path, mode: str) -> Tuple[List[str], List[str]]:
     pattern = re.compile(rf"{PRESET_PATH_RE}modes/{re.escape(mode)}/")
     pointers, loaders = [], []
-    for path, text in _yaml_files(draft_dir, draft_dir / "modes" / mode):
+    for path, text, whole in _yaml_files(draft_dir, draft_dir / "modes" / mode):
         relative = path.relative_to(draft_dir).as_posix()
         if _points_at(path, draft_dir, text, mode):
             pointers.append(relative)
-        elif pattern.search(text):
+        elif _cites(pattern, text, whole):
             loaders.append(relative)
     return pointers, loaders
 
@@ -205,13 +227,35 @@ def file_citations(draft_dir: Path, value: str) -> Tuple[List[str], List[str]]:
     pointed = parts[1] if len(parts) == 3 and parts[0] == "modes" and parts[2] == "pipeline.yml" else None
     pattern = re.compile(rf"{PRESET_PATH_RE}{re.escape(value)}(?![\w./-])")
     pointers, loaders = [], []
-    for path, text in _yaml_files(draft_dir, draft_dir / value):
+    for path, text, whole in _yaml_files(draft_dir, draft_dir / value):
         relative = path.relative_to(draft_dir).as_posix()
         if pointed is not None and _points_at(path, draft_dir, text, pointed):
             pointers.append(relative)
-        elif pattern.search(text):
+        elif _cites(pattern, text, whole):
             loaders.append(relative)
     return pointers, loaders
+
+
+def deletion_check(draft_dir: Path, value: str) -> Dict[str, Any]:
+    target, relative = resolve(draft_dir, value)
+    if str(relative) == MANIFEST:
+        raise FilesError("invalid_request", "preset.yml cannot be deleted")
+    if not target.is_file():
+        raise FilesError("not_found", f"no file {relative}")
+    refusal = deletion_refusal(draft_dir, str(relative))
+    return {"path": str(relative), "allowed": refusal is None, **(refusal or {"message": "", "citing": [], "pointers": [], "loaders": []})}
+
+
+def deletion_refusal(draft_dir: Path, value: str) -> Optional[Dict[str, Any]]:
+    pointers, loaders = file_citations(draft_dir, value)
+    if not pointers and not loaders:
+        return None
+    return {
+        "message": citation_message(f"{value} cannot be deleted", pointers, loaders, ("loads it", "load it")),
+        "citing": sorted(pointers + loaders),
+        "pointers": pointers,
+        "loaders": loaders,
+    }
 
 
 def citing_files(draft_dir: Path, mode: str) -> List[str]:
@@ -229,8 +273,9 @@ def citation_message(subject: str, pointers: List[str], loaders: List[str], load
         clauses.append(f"{_join(pointers)} {'takes its' if len(pointers) == 1 else 'take their'} pipeline from it")
     if loaders:
         clauses.append(f"{_join(loaders)} {loads[0] if len(loaders) == 1 else loads[1]}")
-    count = len(pointers) + len(loaders)
-    return f"{subject}: {', and '.join(clauses)}. Point {'it' if count == 1 else 'them'} elsewhere first."
+    one = len(pointers) + len(loaders) == 1
+    ending = "Point it elsewhere, or remove that line, first." if one else "Point them elsewhere, or remove those lines, first."
+    return f"{subject}: {', and '.join(clauses)}. {ending}"
 
 
 def manifest_modes(text: str) -> List[str]:

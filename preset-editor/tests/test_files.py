@@ -131,7 +131,7 @@ def test_delete_file_removes_it_and_its_emptied_folders_but_never_the_manifest(d
     with pytest.raises(files.FilesError) as failure:
         files.delete_file(draft_dir, "modes/txt2img/tabs/main.yml")
     assert failure.value.code == "conflict"
-    assert failure.value.extra == {"citing": ["modes/txt2img/form.yml"]}
+    assert failure.value.extra == {"citing": ["modes/txt2img/form.yml"], "pointers": [], "loaders": ["modes/txt2img/form.yml"]}
     (draft_dir / "modes" / "txt2img" / "form.yml").write_text("fields: []\n", encoding="utf-8")
 
     files.delete_file(draft_dir, "modes/txt2img/tabs/main.yml")
@@ -185,18 +185,18 @@ def test_the_refusal_names_each_citing_file_in_one_sentence():
     loads = ("loads one of its files", "load its files")
 
     assert files.citation_message("The mode video cannot be removed", [], ["modes/a/form.yml"], loads) == (
-        "The mode video cannot be removed: modes/a/form.yml loads one of its files. Point it elsewhere first."
+        "The mode video cannot be removed: modes/a/form.yml loads one of its files. Point it elsewhere, or remove that line, first."
     )
     assert files.citation_message("The mode video cannot be removed", ["modes/a/pipeline.yml"], [], loads) == (
-        "The mode video cannot be removed: modes/a/pipeline.yml takes its pipeline from it. Point it elsewhere first."
+        "The mode video cannot be removed: modes/a/pipeline.yml takes its pipeline from it. Point it elsewhere, or remove that line, first."
     )
     pointers = ["modes/a/pipeline.yml", "modes/b/pipeline.yml", "modes/c/pipeline.yml"]
     assert files.citation_message("The mode video cannot be removed", pointers, ["modes/a/form.yml", "modes/b/form.yml"], loads) == (
         "The mode video cannot be removed: modes/a/pipeline.yml, modes/b/pipeline.yml and modes/c/pipeline.yml take their pipeline from it, "
-        "and modes/a/form.yml and modes/b/form.yml load its files. Point them elsewhere first."
+        "and modes/a/form.yml and modes/b/form.yml load its files. Point them elsewhere, or remove those lines, first."
     )
     assert files.citation_message("x.yml cannot be deleted", [], ["a.yml", "b.yml"], ("loads it", "load it")) == (
-        "x.yml cannot be deleted: a.yml and b.yml load it. Point them elsewhere first."
+        "x.yml cannot be deleted: a.yml and b.yml load it. Point them elsewhere, or remove those lines, first."
     )
 
 
@@ -210,3 +210,27 @@ def test_a_pointer_and_a_loader_are_told_apart(draft_dir):
     assert files.mode_citations(draft_dir, "video") == (["modes/clip/pipeline.yml"], ["modes/clip/form.yml"])
     assert files.file_citations(draft_dir, "modes/video/pipeline.yml") == (["modes/clip/pipeline.yml"], ["modes/clip/form.yml"])
     assert files.file_citations(draft_dir, "modes/clip/form.yml") == ([], [])
+
+
+def test_a_label_that_names_a_file_keeps_it_and_a_comment_does_not(draft_dir):
+    (draft_dir / "files").mkdir()
+    (draft_dir / "files" / "a.yml").write_text("fields: []\n", encoding="utf-8")
+    form = draft_dir / "modes" / "txt2img" / "form.yml"
+    form.write_text('fields: []\n# children: "{{ paths.preset }}/files/a.yml"\n', encoding="utf-8")
+
+    assert files.file_citations(draft_dir, "files/a.yml") == ([], [])
+
+    form.write_text('label: "see {{ paths.preset }}/files/a.yml"\n', encoding="utf-8")
+    assert files.file_citations(draft_dir, "files/a.yml") == ([], ["modes/txt2img/form.yml"])
+
+    form.write_text('fields: [\n# {{ paths.preset }}/files/a.yml\n', encoding="utf-8")
+    assert files.file_citations(draft_dir, "files/a.yml") == ([], ["modes/txt2img/form.yml"])
+
+
+def test_aliases_are_walked_once(draft_dir):
+    (draft_dir / "files").mkdir()
+    (draft_dir / "files" / "a.yml").write_text("fields: []\n", encoding="utf-8")
+    lines = ['a0: &a0 ["x", "y"]'] + [f"a{n}: &a{n} [*a{n - 1}, *a{n - 1}, *a{n - 1}]" for n in range(1, 25)]
+    (draft_dir / "files" / "bomb.yml").write_text("\n".join(lines) + '\nlast: "{{ paths.preset }}/files/a.yml"\n', encoding="utf-8")
+
+    assert files.file_citations(draft_dir, "files/a.yml") == ([], ["files/bomb.yml"])

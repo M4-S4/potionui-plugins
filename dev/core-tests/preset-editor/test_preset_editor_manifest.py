@@ -98,6 +98,7 @@ def test_api_module_loads_and_exposes_the_router(loader, manifest):
             "drafts",
             "drafts/import",
             "drafts/{draft_id}",
+            "drafts/{draft_id}/deletion",
             "drafts/{draft_id}/export",
             "drafts/{draft_id}/files/{path:path}",
             "drafts/{draft_id}/lint",
