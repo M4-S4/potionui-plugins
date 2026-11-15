@@ -61,7 +61,7 @@ test('a file deletion is checked before its confirmation', () => {
 	assert.deepEqual(deletionPlan({ ok: true, data: { allowed: true } }), { action: 'confirm', message: DELETED });
 	assert.equal(
 		deletionPlan({ ok: false, error: { message: 'Not found' } }).message,
-		`${DELETED} The check of what the deletion breaks did not run (Not found): the server still refuses a file that another file uses.`
+		`${DELETED} The check of what the deletion breaks did not run (Not found): the lint shows what breaks once the file is gone.`
 	);
 });
 

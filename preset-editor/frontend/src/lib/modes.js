@@ -51,7 +51,7 @@ export function deletionPlan(result) {
 	if (!result?.ok) {
 		return {
 			action: 'confirm',
-			message: `${DELETED} The check of what the deletion breaks did not run (${reason(result?.error)}): the server still refuses a file that another file uses.`
+			message: `${DELETED} The check of what the deletion breaks did not run (${reason(result?.error)}): the lint shows what breaks once the file is gone.`
 		};
 	}
 	if (!result.data?.allowed) return { action: 'refuse', refusal: refusalView(result.data, 'file') };
