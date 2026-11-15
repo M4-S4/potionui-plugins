@@ -23,7 +23,7 @@
     {
       "id": "preset-editor",
       "name": "Preset Editor",
-      "version": "0.2.5",
+      "version": "0.2.6",
       "description": "Create, edit, validate and publish presets without leaving PotionUI",
       "license": "GPL-3.0",
       "source": {
@@ -35,8 +35,8 @@
         "plugin_api": null
       },
       "release": {
-        "archive": "https://github.com/M4-S4/potionui-plugins/releases/download/preset-editor-v0.2.5/preset-editor-0.2.5.zip",
-        "sha256": "4ffb778ba87059db95e54cef9d690c7be33709df83b9330ef00929a5a38dab64"
+        "archive": null,
+        "sha256": null
       }
     },
     {

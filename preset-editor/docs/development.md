@@ -25,6 +25,15 @@ The Node tests include a check of every form, fragment and pipeline of the core'
 
 ## Changes in detail
 
+### What changed in 0.2.6
+
+- **Pointers the builder did not check.** The read-only view of a `pipeline_from:` mode now reads the `pipeline.yml` it names and reports, as the core does, a target that is itself a pointer and a target that does not parse; in 0.2.5 only the core's lint reported them.
+- **Deleting a file that another file names.** The text editor's Delete removed the only `modes/<mode>/pipeline.yml` that a `pipeline_from:` line names, or a fragment that a `{{ paths.preset }}/…` path loads, and the lint then refused the draft. The server now refuses such a deletion with a 409 that lists those files, as it does for the removal of a mode.
+- **One sentence per refusal.** A refused removal or deletion says which files take the pipeline and which load a file, in the singular when one file is named, for example `The mode video cannot be removed: modes/first_last/pipeline.yml takes its pipeline from it. Point it elsewhere first.`
+- **Removing a mode that `preset.yml` names.** PotionUI 0.2.0 checks the modes named in `preset.yml` (`vars.video_director.simple_modes`, `prompt_syntax`). Removing a mode named there was accepted and the lint then reported it. Before the confirmation, the workbench now asks the server what the removal leaves: the server lints a copy of the draft without the mode and lists the errors that the draft does not already have. Nothing is cleaned up for you.
+- **API keys on a core the plugin does not know.** The plugin takes the `SESSION_ONLY` marker of `src.plugin_api.identity` for its routes. When the marker is missing and the core names its API keys there (`ApiScope`, `key_access`, `key_scope`), the plugin's routes do not start and the log says why. When the core names neither, as PotionUI 0.1.0, which has no API keys, the routes refuse every `Bearer pui_…` token themselves and the log says so once.
+- **Tests.** Every case that the builder refuses is compared with the core's own message; the Markdown parity test fails with what to do when the core's `markdown.ts` changes its import of `safeUrl`, and holds the entity-encoded colons (`javascript&#58;x` and others) that 0.2.4 linked; the save decision of the pipeline builder has its own test.
+
 ### What changed in 0.2.5
 
 - **Modes that take the pipeline of another mode.** PotionUI 0.2.0 lets a mode's `pipeline.yml` be the single line `pipeline_from: <mode>`, as in the Text to Video, Image to Video and First to Last Frame modes of its MiniMax-H3 preset. The pipeline builder of 0.2.4 wrote such a file back with `pipeline: []` beside that line, which PotionUI refuses, so saving it broke the mode. The builder now opens it read-only and names the mode whose pipeline runs, and removing a mode that another mode names this way is refused.

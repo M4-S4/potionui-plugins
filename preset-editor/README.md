@@ -5,7 +5,7 @@ Create, edit, check and publish presets without leaving PotionUI, for admins onl
 https://raw.githubusercontent.com/M4-S4/potionui-plugins/main/plugins.json
 ```
 
-Version 0.2.5. It runs on PotionUI 0.1.0 or later; the catalogue needs PotionUI 0.2.0 or later, whose **Admin › Plugins** page shows **Install from catalog**.
+Version 0.2.6. It runs on PotionUI 0.1.0 or later; the catalogue needs PotionUI 0.2.0 or later, whose **Admin › Plugins** page shows **Install from catalog**.
 
 1. In **Admin › Plugins**, click **Install from catalog**, paste the catalogue URL and click **Read catalog**.
 2. Click **Install** next to **Preset Editor**, then **Install** in the window that asks to confirm. It arrives in the list, disabled.
@@ -52,6 +52,13 @@ The [reference](docs/reference.md#limits-worth-knowing) lists them all. What is 
 ## Changes
 
 The details of each version are in [docs/development.md](https://github.com/M4-S4/potionui-plugins/blob/main/preset-editor/docs/development.md#changes-in-detail).
+
+### What changed in 0.2.6
+
+- The pipeline builder also reports a `pipeline_from:` that names a mode which is itself a pointer, or whose `pipeline.yml` does not parse.
+- A file that another file of the draft still names, by `pipeline_from:` or by a `{{ paths.preset }}` path, cannot be deleted; the refusal names those files.
+- Removing a mode first shows the lint errors the removal would leave.
+- On a PotionUI it cannot tell how to keep closed to API keys, Preset Editor does not start.
 
 ### What changed in 0.2.5
 
