@@ -1,20 +1,29 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { registerHooks } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { processMarkdown, renderMarkdown, sanitizeLinkUrl } from './markdown.js';
 
-const CORE_UTILS = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..', '..', '..', '..', 'frontend', 'src', 'lib', 'utils');
+const CORE_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..', '..', '..', '..');
+const CORE_UTILS = join(CORE_ROOT, 'frontend', 'src', 'lib', 'utils');
 const CORE_MARKDOWN = join(CORE_UTILS, 'markdown.ts');
 const CORE_SAFE_URL = join(CORE_UTILS, 'safeUrl.ts');
-const skip = existsSync(CORE_MARKDOWN) ? false : 'the plugin is not inside a core checkout (content/plugins/<kind>/preset-editor)';
+const insideCore = existsSync(join(CORE_ROOT, 'src', 'plugin_api'));
+const coreHasMarkdown = existsSync(CORE_MARKDOWN);
+const skip = coreHasMarkdown ? false : 'the plugin is not inside a core checkout, or the core has no frontend/src/lib/utils/markdown.ts (the shape test tells which)';
 const SAFE_URL_IMPORT = "import { sanitizeLinkUrl } from './safeUrl';";
-const coreSource = skip ? '' : readFileSync(CORE_MARKDOWN, 'utf8');
-const coreImports = [...coreSource.matchAll(/^import\s[^;]*?\sfrom\s+(['"])([^'"]+)\1/gm)].map((match) => match[2]);
-const coreHasSafeUrl = !skip && existsSync(CORE_SAFE_URL);
-const knownShape = coreHasSafeUrl ? coreSource.includes(SAFE_URL_IMPORT) && coreImports.length === 1 : coreImports.length === 0;
+const coreSource = coreHasMarkdown ? readFileSync(CORE_MARKDOWN, 'utf8') : '';
+const coreImports = [...coreSource.matchAll(/^\s*(?:import|export)\s[^;]*?\sfrom\s+(['"])([^'"]+)\1|^\s*import\s+(['"])([^'"]+)\3/gm)].map((match) => match[2] ?? match[4]);
+const coreHasSafeUrl = coreHasMarkdown && existsSync(CORE_SAFE_URL);
+const ruleCopies = existsSync(CORE_UTILS)
+	? readdirSync(CORE_UTILS).filter((name) => /\.(ts|js)$/.test(name) && !/\.test\.(ts|js)$/.test(name) && name !== 'safeUrl.ts' && /\b(?:function|const|let)\s+sanitizeLinkUrl\b/.test(readFileSync(join(CORE_UTILS, name), 'utf8')))
+	: [];
+const knownShape =
+	coreHasMarkdown &&
+	ruleCopies.length === 0 &&
+	(coreHasSafeUrl ? coreSource.includes(SAFE_URL_IMPORT) && coreImports.length === 1 : coreImports.length === 0 && /\bfunction sanitizeUrl\(/.test(coreSource));
 
 registerHooks({
 	resolve(specifier, context, nextResolve) {
@@ -49,12 +58,13 @@ const SAMPLES = {
 	'description of a preset': '# Wan 2.2 Lightning\n\nFast text-to-video.\nFour steps, 960×544 cap.\n\n## Modes\n\n| Mode | Steps |\n|---|---|\n| Fast | 4 |\n\nSee [the guide](docs/guide.md).\n'
 };
 
-test('the core Markdown module has a shape this test knows how to load', { skip }, () => {
+test('the core Markdown module has a shape this test knows how to load', { skip: !insideCore && 'the plugin is not inside a core checkout (content/plugins/<kind>/preset-editor)' }, () => {
 	assert.ok(
 		knownShape,
-		`frontend/src/lib/utils/markdown.ts of the core imports ${JSON.stringify(coreImports)} and safeUrl.ts is ${coreHasSafeUrl ? 'there' : 'missing'}. ` +
-			`This test knows two shapes: no import and no safeUrl.ts (before 0.2.0), and exactly ${SAFE_URL_IMPORT} with safeUrl.ts (0.2.0). ` +
-			'Teach the resolve hook and knownShape of markdown.test.js the new line, then compare markdown.js with the link rule of the core again.'
+		`markdown.ts is ${coreHasMarkdown ? 'there' : 'missing'} in frontend/src/lib/utils of the core, imports ${JSON.stringify(coreImports)}, safeUrl.ts is ${coreHasSafeUrl ? 'there' : 'missing'}, ` +
+			`and sanitizeLinkUrl is defined in ${JSON.stringify(ruleCopies)} besides safeUrl.ts. ` +
+			`This test knows two shapes: markdown.ts with its own sanitizeUrl, no import and no safeUrl.ts (before 0.2.0), and markdown.ts with exactly ${SAFE_URL_IMPORT} and the rule in safeUrl.ts only (0.2.0). ` +
+			'Teach the paths, the resolve hook and knownShape of markdown.test.js where the rule now lives, then compare markdown.js with the link rule of the core again.'
 	);
 });
 
@@ -95,6 +105,26 @@ test('a link the core 0.2.0 refuses is text in the preview', () => {
 	}
 	for (const [link] of SAMPLES['entity-encoded colons and letters'].matchAll(/\[[a-z]\]\([^)]+\)/g)) {
 		assert.deepEqual(hrefs(renderMarkdown(link)), [], link);
+	}
+	let deep = '[x](javascript&#58;x)';
+	for (let level = 0; level < 17; level += 1) deep = deep.replace('&', '&amp;');
+	for (const source of [
+		'[x](javascript&colon;x)',
+		'[x](javascript&COLON;x)',
+		'[x](JaVaScRiPt:x)',
+		'[x](DATA:text/html,x)',
+		'[x](java\u200bscript:x)',
+		'[x](java\u00adscript:x)',
+		'[x](%6Aavascript:x)',
+		'[x](vbscript:msgbox)',
+		'[x](javascript&#x0003a;x)',
+		'[x](javascript&#x3ax)',
+		'[x](/\\evil.example)',
+		'[x](\\\\evil.example)',
+		'[x](/\t/evil.example)',
+		deep
+	]) {
+		assert.deepEqual(hrefs(renderMarkdown(source)), [], JSON.stringify(source));
 	}
 	assert.deepEqual(hrefs(renderMarkdown(SAMPLES['table with links'])), ['https://example.com/', './guide.md']);
 	assert.doesNotMatch(renderMarkdown(SAMPLES['raw html']), /<(a|img|svg|iframe|math)\b/);
