@@ -374,6 +374,8 @@ def test_a_yaml_file_over_the_text_budget_is_searched_as_text_up_to_the_budget(c
     big = folder / "files" / "big.yml"
     big.parent.mkdir(parents=True, exist_ok=True)
     big.write_text('a: "{{ paths.preset }}/modes/txt2img/pipeline.yml"\npad: "' + "x" * files.MAX_TEXT_BYTES + '"\n', encoding="utf-8")
+    beyond = folder / "files" / "beyond.yml"
+    beyond.write_text('pad: "' + "x" * files.MAX_TEXT_BYTES + '"\na: "{{ paths.preset }}/modes/txt2img/pipeline.yml"\n', encoding="utf-8")
     form = folder / "modes" / "txt2img" / "form.yml"
     form.write_text("fields: []\n", encoding="utf-8")
 
