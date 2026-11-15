@@ -132,7 +132,7 @@ def _first_link(folder: Path) -> Optional[str]:
 def _refusal(draft: drafts.Draft, mode: str):
     link = _first_link(draft.dir)
     if link is not None:
-        message = f"The mode {mode} cannot be removed: the draft holds a link, {link}, and Preset Editor never works through a link."
+        message = f"The mode {mode} cannot be removed: the draft holds a link, {link}, and Preset Editor never works through a link. Remove the link from the draft folder on the server, or use Discard draft."
         return {"message": message, "citing": [], "pointers": [], "loaders": []}
     pointers, loaders = files.mode_citations(draft.dir, mode)
     if not pointers and not loaders:
@@ -149,7 +149,8 @@ def _drop_mode(preset_dir: Path, text: str, mode: str) -> None:
 
 
 FOLDER = "<preset folder>"
-QUOTED_LIST = re.compile(r"\[(?:'[^'\n]*'(?:, )?)*\]")
+MODES_LIST = re.compile(r"(\bmodes: )\[(?:'[^'\n]*'(?:, )?)*\]")
+KEY_LIMIT = 4096
 
 
 def _prefixes(folder: Path) -> List[str]:
@@ -178,7 +179,7 @@ def _inside(messages: List[str], folder: Path) -> List[str]:
 
 
 def _key(message: str) -> str:
-    return QUOTED_LIST.sub("[…]", message)
+    return message if len(message) > KEY_LIMIT else MODES_LIST.sub(r"\1[…]", message)
 
 
 def _added(before: List[str], after: List[str]) -> List[str]:
@@ -207,10 +208,11 @@ async def _check_removal(draft: drafts.Draft, text: str, mode: str):
         errors_after, warnings_after = await core_bridge.lint_async(copy)
     finally:
         await asyncio.to_thread(shutil.rmtree, scratch, True)
-    return (
-        _added(_inside(errors, draft.dir), _inside(errors_after, copy)),
-        _added(_inside(warnings, draft.dir), _inside(warnings_after, copy)),
-    )
+    return await asyncio.to_thread(_compare, (errors, warnings), (errors_after, warnings_after), draft.dir, copy)
+
+
+def _compare(before, after, folder: Path, copy: Path):
+    return tuple(_added(_inside(old, folder), _inside(new, copy)) for old, new in zip(before, after))
 
 
 @router.get("/drafts/{draft_id}/modes/{mode}/removal")

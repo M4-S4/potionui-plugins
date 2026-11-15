@@ -431,7 +431,8 @@ def test_a_draft_that_holds_a_link_is_never_copied_nor_cut(client, draft, roots,
     assert check.status_code == 200
     assert check.json()["data"]["allowed"] is False
     assert check.json()["data"]["message"] == (
-        "The mode img2img cannot be removed: the draft holds a link, modes/img2img/linked, and Preset Editor never works through a link."
+        "The mode img2img cannot be removed: the draft holds a link, modes/img2img/linked, and Preset Editor never works through a link. "
+        "Remove the link from the draft folder on the server, or use Discard draft."
     )
     assert removal.status_code == 409
     assert (outside / "keep.yml").is_file()
@@ -502,3 +503,40 @@ def test_lint_messages_drop_the_folder_in_every_form_and_a_mode_list_does_not_ma
     ]
     assert routes_files._added(before, after) == ["[ERROR] preset.yml: prompt_syntax.loop: 'loop' is not a mode of this preset"]
     assert routes_files._added(before, before + before) == before
+
+
+def test_a_new_error_that_differs_from_an_old_one_only_by_a_list_other_than_the_modes_is_announced():
+    before = ["[ERROR] preset.yml: speed_profiles: unknown keys ['x']"]
+    after = ["[ERROR] preset.yml: speed_profiles: unknown keys ['x']", "[ERROR] preset.yml: speed_profiles: unknown keys ['x', 'y']"]
+
+    assert routes_files._added(before, after) == ["[ERROR] preset.yml: speed_profiles: unknown keys ['x', 'y']"]
+
+
+def test_a_lint_message_over_the_key_limit_is_compared_whole():
+    hostile = "modes: [" + "'[', " * 20000
+    message = "[ERROR] preset.yml: " + hostile
+
+    assert routes_files._key(message) == message
+    assert routes_files._key("x modes: ['a', 'b'] y") == "x modes: […] y"
+    long = "[ERROR] preset.yml: " + "x" * routes_files.KEY_LIMIT + " modes: ['a', 'b']"
+    assert routes_files._key(long) == long
+    assert routes_files._added([message], [message, message + "!"]) == [message + "!"]
+
+
+def test_the_removal_check_compares_the_lint_messages_off_the_event_loop(client, draft, monkeypatch):
+    client.post(f"{DRAFTS_URL}/{draft['draft_id']}/modes", json={"mode": "img2img"})
+    seen = []
+    original = routes_files._compare
+
+    def recording(*args):
+        try:
+            asyncio.get_running_loop()
+            seen.append("event loop")
+        except RuntimeError:
+            seen.append("thread")
+        return original(*args)
+
+    monkeypatch.setattr(routes_files, "_compare", recording)
+
+    assert client.get(f"{DRAFTS_URL}/{draft['draft_id']}/modes/img2img/removal").status_code == 200
+    assert seen == ["thread"]
