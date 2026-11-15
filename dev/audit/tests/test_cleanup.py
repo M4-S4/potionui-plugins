@@ -120,10 +120,11 @@ def test_cleanup_lists_then_deletes_the_generations_and_the_files_the_run_create
     assert [(item["id"], item["on_instance"]) for item in plan["generations"]] == [("G1", True)]
     assert files_of(plan) == [("1-bottle.png", True, True), ("2-mask.png", True, True)]
     assert abs(plan["clock"]["server_offset_seconds"]) < 2 and plan["clock"]["margin_seconds"] >= 2
-    assert lines[-1].startswith("1 of 1 generations and 2 files of seg-4 to delete: pass --confirm")
+    assert lines[-1] == "1 generations and 2 files of seg-4 to delete: pass --confirm to delete them; not attributed and kept: 0 generations, 0 files; already gone: 0 generations, 0 files"
+    assert lines[0] == "seg-4 ran with this account on this instance"
     assert not [method for method, _ in fake_api.methods() if method == "DELETE"]
     assert not (run_dir / "cleanup.json").exists()
-    assert main(["cleanup", str(run_dir), "--config", str(config_file), "--confirm"]) == 0
+    assert main(["cleanup", str(run_dir.parent / "seg-4"), "--config", str(config_file), "--confirm"]) == 0
     assert fake_api.deleted == ["/api/generations/history/G1", "/api/media/uploads/1-bottle.png", "/api/media/uploads/2-mask.png"]
     assert [row["filename"] for row in fake_api.listed()] == ["someone.png"]
     trace = json.loads((run_dir / "cleanup.json").read_text(encoding="utf-8"))
@@ -163,7 +164,8 @@ def test_without_created_the_library_marks_of_the_run_decide(fake_api, tmp_path,
     matrix_cleanup(logged_in(fake_api), [run_dir], True, quiet)
     assert (run_dir / "cleanup.json").is_file() and (run_dir / "cleanup-2.json").is_file()
     again = json.loads((run_dir / "cleanup-2.json").read_text(encoding="utf-8"))
-    assert [(item["on_instance"], item.get("exists_after")) for item in again["generations"]] == [(False, False)]
+    assert [(item["on_instance"], item["attributed"]) for item in again["generations"]] == [(False, None)]
+    assert (again["state"], again["counts"]["generations"]) == ("done", {"deleted": 0, "not_deleted": 0, "not_tried": 0})
 
 
 def test_a_run_made_before_the_marks_attributes_by_its_window_less_the_clock_margin(fake_api, tmp_path, case_file):
@@ -208,7 +210,9 @@ def test_a_window_proof_needs_a_recorded_id_and_a_readable_clock():
     span = {"run": "vp-4", "window": (T0, T0 + timedelta(seconds=600)), "marks": None}
     rows = {"a.png": {"id": "L1", "filename": "a.png", "original_filename": None, "created_at": at(100)}}
     found = attribute(candidate("a.png", "chain_frame", span), rows, 2.0)
-    assert (found["attributed"], found["proof"]) == (False, "vp-4 recorded no library id for it")
+    assert (found["attributed"], found["proof"]) == (False, "the runs recorded no library id for it")
+    found = attribute(candidate("a.png", "upload", span, created=True), rows, 2.0)
+    assert (found["attributed"], found["proof"]) == (False, "the runs recorded no library id for it")
     found = attribute(candidate("a.png", "chain_frame", span, upload_id="L1"), rows, None)
     assert (found["attributed"], found["proof"]) == (False, "vp-4 recorded no library marks, and the clock of the server could not be read")
 
@@ -245,7 +249,8 @@ def test_an_error_while_deleting_is_recorded_and_the_trace_is_written(fake_api, 
     plan = matrix_cleanup(logged_in(fake_api), [run_dir], True, lines.append)
     assert "HTTP 503" in plan["files"][0]["error"] and plan["files"][0]["exists_after"] is None
     assert plan["files"][1]["deleted"] is True
-    assert "1 errors" in lines[-1]
+    assert "1 of 1 generations and 1 of 2 files deleted; not deleted: 0 generations, 1 files; not tried: 0" in lines[-1]
+    assert plan["failed"] is True
     trace = json.loads((run_dir / "cleanup.json").read_text(encoding="utf-8"))
     assert "HTTP 503" in trace["files"][0]["error"]
 
@@ -259,3 +264,91 @@ def test_cleanup_refuses_a_folder_that_is_not_a_matrix_run(fake_api, tmp_path, c
     (run_dir / "run.json").write_text(json.dumps({**run, "dry_run": True}), encoding="utf-8")
     with pytest.raises(RunRefused, match="dry run"):
         matrix_cleanup(logged_in(fake_api), [run_dir], False, quiet)
+
+
+def test_a_start_mark_without_an_id_is_an_empty_library_only_when_the_total_is_nought():
+    record = {"started_at": at(0), "ended_at": at(60), "library_start": {"total": 4, "id": None, "created_at": None}, "library_end": {"total": 5, "id": "A2", "created_at": at(50)}}
+    assert run_span("r", record)["marks"] is None
+    record["library_start"]["total"] = 0
+    assert run_span("r", record)["marks"] == (None, (T0 + timedelta(seconds=50), "A2"))
+
+
+def test_the_clock_margin_has_a_floor_of_a_minute(fake_api):
+    from potion_audit.cleanup import clock_margin
+
+    found = clock_margin(logged_in(fake_api))
+    assert abs(found["server_offset_seconds"]) < 2 and found["margin_seconds"] == 60.0 and found["measured"] == "when the cleanup runs"
+
+
+def test_a_generation_whose_record_does_not_match_the_run_is_kept(fake_api, tmp_path, case_file):
+    pack = made_pack(tmp_path, case_file)
+    run_dir = segment(fake_api, pack, tmp_path, "seg-12")
+    run = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
+    fake_api.record_extra = {"created_at": run["started_at"], "preset_id": "01SOMEOTHERPRESET"}
+    plan = matrix_cleanup(logged_in(fake_api), [run_dir], True, quiet)
+    assert plan["generations"][0]["attributed"] is False
+    assert plan["generations"][0]["proof"].startswith("its preset is 01SOMEOTHERPRESET, the run recorded ")
+    fake_api.record_extra = {"created_at": run["started_at"], "mode": "img2img"}
+    plan = matrix_cleanup(logged_in(fake_api), [run_dir], False, quiet)
+    assert [item["proof"] for item in plan["generations"]] == ["its mode is img2img, the run recorded txt2img"]
+    fake_api.record_extra = {"created_at": "2026-01-01T00:00:00+00:00"}
+    plan = matrix_cleanup(logged_in(fake_api), [run_dir], False, quiet)
+    assert plan["generations"][0]["proof"] == "created at 2026-01-01T00:00:00+00:00, more than 60.0 s outside the run"
+    fake_api.record_extra = {"created_at": run["started_at"]}
+    plan = matrix_cleanup(logged_in(fake_api), [run_dir], False, quiet)
+    assert plan["generations"][0]["attributed"] is True and "during the run" in plan["generations"][0]["proof"]
+    assert "/api/generations/history/G1" not in fake_api.deleted
+
+
+def test_a_matrix_cleanup_takes_a_night_folder_and_refuses_a_run_with_no_end(fake_api, tmp_path, case_file):
+    pack = made_pack(tmp_path, case_file)
+    first = segment(fake_api, pack, tmp_path, "night-1")
+    second = segment(fake_api, pack, tmp_path, "night-2")
+    night = tmp_path / "out" / "night"
+    night.mkdir()
+    (night / "night.json").write_text(json.dumps({"run_id": "night", "segments": [{"run_id": "night-1"}, {"run_id": "night-2"}]}), encoding="utf-8")
+    plan = matrix_cleanup(logged_in(fake_api), [night], False, quiet)
+    assert plan["segments"] == ["night-1", "night-2"]
+    run = json.loads((second / "run.json").read_text(encoding="utf-8"))
+    run["ended_at"] = None
+    (second / "run.json").write_text(json.dumps(run), encoding="utf-8")
+    with pytest.raises(RunRefused, match="night-2 recorded no end"):
+        matrix_cleanup(logged_in(fake_api), [night], True, quiet)
+    assert fake_api.deleted == [] and not (first / "cleanup.json").exists()
+
+
+def test_a_matrix_cleanup_stops_when_the_instance_cannot_be_reached(fake_api, config_file, credentials_env, tmp_path, case_file):
+    from potion_audit.client import ApiUnreachable
+
+    pack = made_pack(tmp_path, case_file)
+    run_dir = segment(fake_api, pack, tmp_path, "seg-13")
+    client = logged_in(fake_api)
+    deleted = []
+
+    def gone(path, missing_ok=False):
+        deleted.append(path)
+        raise ApiUnreachable(f"DELETE {path}: connection refused")
+
+    client.delete_json = gone
+    plan = matrix_cleanup(client, [run_dir], True, quiet)
+    assert deleted == ["/api/generations/history/G1"]
+    assert plan["failed"] is True and plan["counts"]["files"] == {"deleted": 0, "not_deleted": 0, "not_tried": 2}
+    assert plan["stopped"].startswith("not tried: the cleanup stopped after DELETE /api/generations/history/G1: connection refused")
+
+
+def test_a_matrix_run_refuses_to_start_in_a_folder_already_cleaned(fake_api, tmp_path, case_file):
+    pack = made_pack(tmp_path, case_file)
+    run_dir = segment(fake_api, pack, tmp_path, "seg-14")
+    matrix_cleanup(logged_in(fake_api), [run_dir], True, quiet)
+    with pytest.raises(RunRefused, match="holds the trace of a cleanup"):
+        segment(fake_api, pack, tmp_path, "seg-14")
+
+
+def test_the_fake_server_reuses_the_newest_file_with_the_same_bytes(fake_api, tmp_path, case_file):
+    pack = made_pack(tmp_path, case_file)
+    data = (pack.root / "inputs" / "bottle.png").read_bytes()
+    fake_api.dedupe = True
+    fake_api.add_file("older.png", "bottle.png", "2026-01-01T00:00:00+00:00", data, "01A")
+    fake_api.add_file("newer.png", "bottle.png", "2026-02-01T00:00:00+00:00", data, "01B")
+    run_dir = segment(fake_api, pack, tmp_path, "seg-15")
+    assert next(iter(recorded(run_dir).values()))["filename"] == "newer.png"

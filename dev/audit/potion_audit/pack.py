@@ -170,6 +170,9 @@ def _cell(raw: dict, case_set: CaseSet, position: int, keys: set[str]) -> Cell:
     if preset is None:
         raise PackError(f"cell {ref}:{raw.get('mode')}: no preset {ref!r} in {case_set.path.name}")
     profiles = tuple(raw.get("profiles") or ())
+    allowed = raw.get("allowed_steps") or []
+    if not isinstance(allowed, list):
+        raise PackError(f"cell {ref}:{raw.get('mode')}: allowed_steps must be a list of step names, such as [\"TXT2IMG\"], got {allowed!r}")
     return Cell(
         preset_ref=preset_ref(preset),
         preset_id=preset["id"],
@@ -196,7 +199,7 @@ def _cell(raw: dict, case_set: CaseSet, position: int, keys: set[str]) -> Cell:
         notes=raw.get("notes"),
         position=position,
         min_vram_gb=raw.get("min_vram_gb"),
-        allowed_steps=tuple(str(step).upper() for step in raw.get("allowed_steps") or ()),
+        allowed_steps=tuple(str(step).upper() for step in allowed),
     )
 
 
@@ -461,6 +464,8 @@ def cell_checks(pack: Pack, cell: Cell) -> dict:
     steps = forbidden_steps(cell)
     if steps:
         checks["forbidden_steps"] = steps
+    if cell.bind:
+        checks["bound_media"] = len(cell.bind)
     return checks
 
 

@@ -5,7 +5,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
-from .cleanup import library_mark
+from .cleanup import account_identity, library_mark, refuse_cleaned
 from .client import ApiClient, ApiError, unwrap
 from .coverage import ModelResolver, assess, live_state
 from .inputs import Uploads
@@ -73,6 +73,8 @@ def run_profile(client: ApiClient, pack: Pack, profile: str, out_root: Path, run
     timing = timing_by_preset(client)
     app_version = ((client.get_json("/openapi.json") or {}).get("info") or {}).get("version")
     run_dir = out_root / run_id
+    if run_dir.is_dir():
+        refuse_cleaned(run_dir)
     run_dir.mkdir(parents=True, exist_ok=True)
     library_start = library_mark(client)
     uploads = Uploads(client, run_dir / "uploads.json")
@@ -88,6 +90,7 @@ def run_profile(client: ApiClient, pack: Pack, profile: str, out_root: Path, run
         "ended_at": None,
         "library_start": library_start,
         "library_end": None,
+        "account": account_identity(client),
         "machine": machine,
         "mode": mode,
         "app_version": app_version,
@@ -161,6 +164,7 @@ def run_profile(client: ApiClient, pack: Pack, profile: str, out_root: Path, run
                 "cases": run["cases"],
                 "app_version": app_version,
                 "runner": run["runner"],
+                "models": [{key: model.get(key) for key in ("field", "sha256", "filename")} for model in assessed["models"]],
             }
             current = entry
             try:

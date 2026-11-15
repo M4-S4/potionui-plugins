@@ -7,7 +7,7 @@ from pathlib import Path
 
 from .cases import CaseFileError, import_from_core, load_cases, write_case_set
 from .check import collect, write_preflight
-from .cleanup import matrix_cleanup
+from .cleanup import UNRECORDED, matrix_cleanup
 from .client import ApiClient, ApiError, ApiUnreachable
 from .config import ConfigError, credentials, load_config
 from .coverage import FormReader, ModelResolver, coverage, live_state
@@ -66,9 +66,10 @@ def _parser() -> argparse.ArgumentParser:
     reevaluate.add_argument("--pack", type=Path, default=DEFAULT_PACK)
 
     clean = commands.add_parser("cleanup", help="list the generations of a matrix run and the files it created on the instance, delete them with --confirm")
-    clean.add_argument("runs", type=Path, nargs="+", help="the segment folders of one matrix run, each with its run.json")
+    clean.add_argument("runs", type=Path, nargs="+", help="the segment folders of one matrix run, each with its run.json, or the folder of its night with night.json")
     clean.add_argument("--config", type=Path, default=Path("audit.toml"))
     clean.add_argument("--confirm", action="store_true", help="delete what the listing attributes to the run, and write cleanup.json in each segment folder")
+    clean.add_argument(UNRECORDED, action="store_true", help="with --confirm, delete for a run that recorded no account, without checking that this is its instance")
 
     merge = commands.add_parser("merge", help="one page with a column per machine")
     merge.add_argument("runs", type=Path, nargs="+", help="run folders, night folders and scenario folders of several machines; the segments of one machine are put together, its scenario goes in its column")
@@ -268,6 +269,9 @@ def _report(args) -> int:
             if scenario is None:
                 raise ReportError("--compare gives a scenario, but the report has no scenario")
             scenario_comparison = compare_scenarios(scenario, load_one_scenario(old_scenarios))
+    shown = sorted({str(name) for name in ((run_set.machine if run_set else None), (previous.machine if previous else None), (scenario.machine if scenario else None), (scenario_comparison or {}).get("previous", {}).get("machine")) if name})
+    if len(shown) > 1:
+        print(f"warning: the page shows the names of {len(shown)} machines: {', '.join(shown)}", file=sys.stderr)
     index = write_report(run_set, args.out or args.runs[0] / "report", comparison, media=not args.no_media, scenario=scenario, scenario_comparison=scenario_comparison, previous=previous)
     print(f"report: {index}")
     if comparison is not None:
@@ -291,8 +295,8 @@ def _cleanup(args) -> int:
     username, password = credentials(config.target, os.environ)
     client = ApiClient(config.target.url, config.target.timeout_seconds)
     client.login(username, password)
-    matrix_cleanup(client, list(args.runs), args.confirm)
-    return EXIT_OK
+    plan = matrix_cleanup(client, list(args.runs), args.confirm, allow_unrecorded=args.allow_unrecorded_instance)
+    return EXIT_FAIL if plan["failed"] else EXIT_OK
 
 
 def _merge(args) -> int:

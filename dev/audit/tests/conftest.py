@@ -70,6 +70,7 @@ class FakeApi:
         self.outcomes = []
         self.health = "healthy"
         self.history = [{"at": "2026-01-01T00:00:00+00:00", "step": "Loading model x", "message": "<<PIPE:Loading model>>"}]
+        self.media_sent = 0
         self.named_models = {}
         self.vram_gb = 12.0
         self.sdxl_modes = ["txt2img"]
@@ -78,6 +79,8 @@ class FakeApi:
         self.raw_forms = {}
         self.plugins = [{"id": "video-producer", "version": "0.1.0", "enabled": True, "state": "enabled", "source": "marketplace"}]
         self.library = []
+        self.account_id = "01FAKEACCOUNT"
+        self.record_extra = {}
         self.dedupe = False
         self.library_readable = True
         self.deleted = []
@@ -96,6 +99,12 @@ class FakeApi:
         self.library.append(row)
         return row
 
+    def _history(self) -> list[dict]:
+        if not self.media_sent or any("Processing" in str(entry.get("step")) for entry in self.history):
+            return self.history
+        count = self.media_sent
+        return [{"at": "2026-01-01T00:00:00+00:00", "step": f"Processing <<NUMBER:{count} media files:folder>>"}, {"at": "2026-01-01T00:00:00+00:00", "step": f"Loaded <<NUMBER:{count} files:check-circle>>"}, *self.history]
+
     def gone_files(self) -> set[str]:
         return {path.rsplit("/", 1)[1] for path in self.deleted if path.startswith("/api/media/uploads/")}
 
@@ -107,7 +116,8 @@ class FakeApi:
         filename = multipart_filename(body)
         content = body.split(b"\r\n\r\n", 1)[1].rsplit(b"\r\n--", 1)[0]
         self.uploads.append(filename)
-        held = next((row for row in self.listed() if self.dedupe and row["content"] == content), None)
+        same = [row for row in self.listed() if self.dedupe and row["content"] == content]
+        held = max(same, key=lambda row: (row["created_at"], row["id"])) if same else None
         if held is None:
             stored = f"{len(self.uploads)}-{filename}"
             held = self.add_file(stored, filename, content=content)
@@ -150,7 +160,7 @@ class FakeApi:
         if headers.get("Authorization") != f"Bearer {TOKEN}":
             return 401, {"detail": "Not authenticated"}, "application/json"
         if path == "/api/auth/me":
-            return 200, envelope({"username": USER, "account_type": "ADMIN"}), "application/json"
+            return 200, envelope({"id": self.account_id, "username": USER, "account_type": "ADMIN", "created_at": "2026-01-01T00:00:00+00:00"}), "application/json"
         if path == "/api/plugins":
             return 200, envelope(self.plugins), "application/json"
         if path == "/api/media/upload" and method == "POST":
@@ -219,6 +229,7 @@ class FakeApi:
             if self.outcomes:
                 self.final, self.failure = self.outcomes.pop(0)
             self.started.append(request)
+            self.media_sent = json.dumps(request.get("form_data") or {}).count("uploads/")
             return 200, envelope({"generation_id": "G1", "status": {"id": "G1", "status": "pending"}}), "application/json"
         if path == "/api/generations/G1/status":
             if self.statuses:
@@ -228,9 +239,9 @@ class FakeApi:
         if path == "/api/generations/G1/cancel" and method == "POST":
             return 200, envelope({}), "application/json"
         if path == "/api/admin/generations/G1":
-            return 200, envelope({"generation": {}, "run_report": {"pipe_timers": {"0": {"started_at": "2026-01-01T00:00:00+00:00", "ended_at": "2026-01-01T00:00:02.500000+00:00"}}, "status_history": self.history}}), "application/json"
+            return 200, envelope({"generation": {}, "run_report": {"pipe_timers": {"0": {"started_at": "2026-01-01T00:00:00+00:00", "ended_at": "2026-01-01T00:00:02.500000+00:00"}}, "status_history": self._history()}}), "application/json"
         if path == "/api/generations/history/G1":
-            return 200, envelope({"id": "G1", "run_seconds": 12, "queued_seconds": 0, "duration_ms": 12000, "has_profile": False}), "application/json"
+            return 200, envelope({"id": "G1", "run_seconds": 12, "queued_seconds": 0, "duration_ms": 12000, "has_profile": False, **self.record_extra}), "application/json"
         if path == "/api/generations/history/G1/export-bundle":
             return 200, bundle_bytes(self.outputs), "application/zip"
         if path == "/api/generations/G1/failure":

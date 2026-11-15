@@ -110,6 +110,8 @@ def evaluate_run_report(checks: dict, run_report: dict) -> list[dict]:
     results = []
     if sum(asked):
         results.append({"check": "media_loaded", "expected": f"{sum(asked)} media files loaded", "actual": loaded, "ok": sum(loaded) >= sum(asked)})
+    elif checks.get("bound_media"):
+        results.append({"check": "media_loaded", "expected": f"the {checks['bound_media']} media the cell binds processed and loaded", "actual": "the run report names no media file processed", "ok": False})
     forbidden = {step.upper() for step in checks.get("forbidden_steps") or ()}
     if forbidden:
         seen = sorted({step.strip() for index, step in enumerate(steps) if step.strip().upper() in forbidden and not _refines_source(steps[:index], step)})

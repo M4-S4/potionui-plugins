@@ -443,3 +443,20 @@ def test_run_and_check_honour_only_a_threshold_below_a_declared_tier(pack, cell_
 
     wan = dataclasses.replace(cell(pack, "core/Wan:video"), min_vram_gb=cell_gb)
     assert tier_need({"requires": {"min_vram_gb": preset_gb}}, wan) == expected
+
+
+def test_a_cell_that_binds_media_fails_when_the_run_report_names_no_media_processed():
+    from potion_audit.pack import DEFAULT_PACK, cell_checks
+    from potion_audit.run import evaluate_run_report
+
+    pack = load_pack(DEFAULT_PACK)
+    checks = cell_checks(pack, cell(pack, "core/MiniMax-H3-Image:edit"))
+    assert checks["bound_media"] == 1 and "bound_media" not in cell_checks(pack, cell(pack, "core/MiniMax-H3-Image:txt2img"))
+    found = evaluate_run_report(checks, {"status_history": [{"step": "TXT2IMG"}] * 6})
+    assert found == [{"check": "media_loaded", "expected": "the 1 media the cell binds processed and loaded", "actual": "the run report names no media file processed", "ok": False}]
+    assert evaluate_run_report({}, {"status_history": [{"step": "TXT2IMG"}]}) == []
+
+
+def test_allowed_steps_given_as_text_is_refused_with_its_own_message(tmp_path, case_file):
+    with pytest.raises(PackError, match=r"core/Wan:video: allowed_steps must be a list of step names, such as \["):
+        wan_pack(tmp_path, case_file, 'bind = {input_video = "bottle"}', 'allowed_steps = "TXT2VID"')

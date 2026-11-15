@@ -12,7 +12,7 @@ import numpy as np
 from PIL import Image
 
 from .check import runner_info
-from .cleanup import FAILURES, attribute, candidate, chain_frame, clock_margin, delete_generation, delete_upload, export_media, generation_on_instance, library, library_mark, log_files, merge, recorded_uploads, run_span, split, write_trace
+from .cleanup import FAILURES, UNRECORDED, account_identity, attribute, candidate, chain_frame, check_generation, clock_margin, delete_all, delete_generation, delete_upload, export_media, failed_item, generation_on_instance, guard, library, library_mark, log_files, log_generations, merge, recorded_uploads, refuse_cleaned, run_span, save_trace, split, tally, trace_path
 from .client import ApiClient, ApiError, unwrap
 from .config import load_config, credentials
 from .inputs import Uploads
@@ -1001,10 +1001,13 @@ def _step_of(result: dict, folder: Path, run_dir: Path) -> dict:
 
 def run_scenario(client: ApiClient, pack: Pack, out_root: Path, run_id: str, engines: list[dict], matrix: dict | None, *, quality: str = "draft", upscaler: str = "seedvr2", target: str = "fhd1080", companion_steps: int | None = None, timeout: float | None = None, interval: float = 2.0, machine: str | None = None, clock: Callable[[], float] = time.monotonic, sleep: Callable[[float], None] = time.sleep, log: Callable[[str], None] = print) -> dict:
     final = upscaler_state(pack, matrix, upscaler)
-    scenario = _head(client, pack, run_id, False, machine, matrix, quality, final, target, companion_steps)
     run_dir = out_root / run_id
+    if run_dir.is_dir():
+        refuse_cleaned(run_dir)
+    scenario = _head(client, pack, run_id, False, machine, matrix, quality, final, target, companion_steps)
     run_dir.mkdir(parents=True, exist_ok=True)
     scenario["library_start"] = library_mark(client)
+    scenario["account"] = account_identity(client)
     base = {"schema": 1, "run_id": run_id, "kind": "vp-scenario", "pack": scenario["pack"], "cases": scenario["cases"], "app_version": scenario["app_version"], "plugin": scenario["plugin"], "runner": scenario["runner"]}
     limit = timeout or DEFAULT_TIMEOUT
     try:
@@ -1053,107 +1056,155 @@ def scenario_passed(scenario: dict) -> bool:
     return not scenario["stopped"] and all(verdict == "PASS" for entry in scenario["engines"] for verdict in _engine_summary(entry))
 
 
-def _result_files(run_dir: Path, scenario: dict) -> tuple[list[dict], set[str], set[str]]:
-    found = []
-    takes = set()
-    generations = set()
+def _engine_records(run_dir: Path, scenario: dict) -> list[dict]:
+    records = []
     for entry in scenario.get("engines") or ():
+        project = entry.get("project") or {}
+        record = {"engine": entry.get("engine"), "project_id": project.get("id"), "name": project.get("name"), "takes": set(), "generations": {}, "files": [], "asset_ids": [], "kept": None}
         for step in entry.get("steps") or ():
-            takes.update(str(value) for value in (step.get("take_id"),) if value)
-            generations.update(str(value) for value in (step.get("generation_id"),) if value)
+            result = {}
             path = run_dir / str(step.get("result") or "")
-            if not step.get("result") or not path.is_file():
-                continue
-            try:
-                result = json.loads(path.read_text(encoding="utf-8"))
-            except ValueError:
-                continue
+            if step.get("result") and path.is_file():
+                try:
+                    result = json.loads(path.read_text(encoding="utf-8"))
+                except ValueError:
+                    result = {}
             take = result.get("take") or {}
-            takes.update(str(value) for value in (take.get("id"),) if value)
-            generations.update(str(value) for value in (take.get("generation_id"), result.get("generation_id")) if value)
-            found += [item for item in (chain_frame(take), export_media(result.get("job") or {})) if item]
-    return found, takes, generations
+            record["takes"].update(str(value) for value in (step.get("take_id"), take.get("id")) if value)
+            generation_id = step.get("generation_id") or take.get("generation_id") or result.get("generation_id")
+            if generation_id:
+                record["generations"].setdefault(str(generation_id), step.get("preset_id") or take.get("preset_id"))
+            record["files"] += [item for item in (chain_frame(take), export_media(result.get("job") or {})) if item]
+        records.append(record)
+    for item in scenario.get("library") or ():
+        if isinstance(item, dict) and item.get("filename"):
+            owner = next((record for record in records if record["engine"] == item.get("engine")), None)
+            if owner is not None:
+                owner["files"].append(dict(item))
+    return records
 
 
 def _asset_ids(doc: dict) -> list[str]:
     return [str(asset["origin"]["itemId"]) for asset in (doc or {}).get("assets") or () if isinstance(asset, dict) and isinstance(asset.get("origin"), dict) and asset["origin"].get("kind") == "library" and asset["origin"].get("itemId")]
 
 
-def cleanup(client: ApiClient, run_dir: Path, confirm: bool, log: Callable[[str], None] = print) -> dict:
-    record = run_dir / "scenario.json"
-    if not record.is_file():
+def delete_project(client: ApiClient, item: dict) -> Exception | None:
+    try:
+        item["deleted"] = client.delete_json(f"{VP}/projects/{item['id']}", missing_ok=True) is not None
+        item["exists_after"] = client.get_json(f"{VP}/projects/{item['id']}", missing_ok=True) is not None
+    except FAILURES as error:
+        return failed_item(item, error)
+    return None
+
+
+def cleanup(client: ApiClient, run_dir: Path, confirm: bool, log: Callable[[str], None] = print, allow_unrecorded: bool = False) -> dict:
+    record_path = run_dir / "scenario.json"
+    if not record_path.is_file():
         raise RunRefused(f"{run_dir.name} holds no scenario.json")
-    scenario = json.loads(record.read_text(encoding="utf-8"))
+    scenario = json.loads(record_path.read_text(encoding="utf-8"))
     if scenario.get("dry_run"):
         raise RunRefused(f"{run_dir.name} is a dry run: it created nothing on the instance")
     run_id = scenario["run_id"]
     span = run_span(run_id, scenario)
-    recorded = {entry["project"]["id"] for entry in scenario.get("engines") or () if entry.get("project") and entry["project"].get("id")}
+    current = account_identity(client)
+    refusals, notes = guard(scenario, run_id, current, allow_unrecorded)
+    records = _engine_records(run_dir, scenario)
+    recorded = {record["project_id"] for record in records if record["project_id"]}
+    ordered = set().union(*(record["takes"] for record in records)) if records else set()
     listed = (unwrap(client.get_json(f"{VP}/projects")) or {}).get("projects") or []
-    named_only = {item["id"] for item in listed if str(item.get("name") or "").startswith(project_prefix(run_id))} - recorded
-    named, takes, generations = _result_files(run_dir, scenario)
-    named += [dict(item) for item in scenario.get("library") or () if isinstance(item, dict)]
-    asset_ids = []
+    named_only = sorted({item["id"] for item in listed if str(item.get("name") or "").startswith(project_prefix(run_id))} - recorded)
     project_items = []
-    others = []
-    for project_id in sorted(recorded | named_only):
-        project = client.get_json(f"{VP}/projects/{project_id}", missing_ok=True)
-        mine = project_id in recorded
-        project_items.append({"id": project_id, "on_instance": project is not None, "attributed": mine, "proof": "scenario.json records its id" if mine else "only its name starts with the prefix of the run, scenario.json does not record it"})
-        if project is not None and mine:
-            asset_ids += _asset_ids(((unwrap(project) or {}).get("project") or {}).get("doc") or {})
-        found = client.get_json(f"{VP}/projects/{project_id}/takes", missing_ok=True) if project is not None else None
-        for take in (unwrap(found) or {}).get("takes") or () if found else ():
-            generation_id = str(take.get("generation_id") or "")
-            if generation_id and generation_id not in generations and generation_id not in others:
-                others.append(generation_id)
-            frame = chain_frame(take)
-            if frame and str(take.get("id")) in takes:
-                named.append(frame)
+    foreign = []
+    for record in records:
+        if not record["project_id"]:
+            continue
+        found = client.get_json(f"{VP}/projects/{record['project_id']}", missing_ok=True)
+        item = {"id": record["project_id"], "engine": record["engine"], "on_instance": found is not None, "attributed": None, "proof": "no longer on the instance"}
+        project_items.append(item)
+        if found is None:
+            continue
+        project = (unwrap(found) or {}).get("project") or {}
+        record["asset_ids"] = _asset_ids(project.get("doc") or {})
+        reasons = []
+        if record["name"] and project.get("name") != record["name"]:
+            reasons.append(f"its name is now {project.get('name')!r}, the run named it {record['name']!r}")
+        takes = client.get_json(f"{VP}/projects/{record['project_id']}/takes", missing_ok=True)
+        for take in (unwrap(takes) or {}).get("takes") or () if takes else ():
+            if str(take.get("id")) in ordered:
+                frame = chain_frame(take)
+                if frame:
+                    record["files"].append(frame)
+                continue
+            reasons.append(f"it holds the take {take.get('id')}, which the run did not order")
+            if take.get("generation_id"):
+                foreign.append({"id": str(take["generation_id"]), "project": record["project_id"]})
+        if reasons:
+            record["kept"] = "; ".join(reasons)
+            item.update(attributed=False, proof=record["kept"] + ": the project is kept, with everything the run made for it")
+        else:
+            item.update(attributed=True, proof="scenario.json records its id, it keeps the name the run gave it and holds only the takes the run ordered")
+    for project_id in named_only:
+        project_items.append({"id": project_id, "engine": None, "on_instance": True, "attributed": False, "proof": "only its name starts with the prefix of the run, scenario.json does not record it"})
+    clock = clock_margin(client)
     rows = library(client)
     by_id = {row["id"]: name for name, row in rows.items() if row.get("id")}
-    named += [{"filename": by_id[item_id], "id": item_id, "kind": "project_asset", "export_name": None} for item_id in asset_ids if item_id in by_id]
     found = recorded_uploads(run_dir, span)
-    found += [candidate(item["filename"], item["kind"], span, upload_id=item.get("id"), export_name=item.get("export_name")) for item in named if item.get("filename")]
+    for record in records:
+        named = record["files"] + [{"filename": by_id[item_id], "id": item_id, "kind": "project_asset", "export_name": None} for item_id in record["asset_ids"] if item_id in by_id]
+        record["filenames"] = {item["filename"] for item in named if item.get("filename")}
+        found += [candidate(item["filename"], item["kind"], span, upload_id=item.get("id"), export_name=item.get("export_name")) for item in named if item.get("filename")]
     merged = {}
     for item in found:
         merge(merged, item)
-    clock = clock_margin(client)
     files = [attribute(item, rows, clock["margin_seconds"]) for item in merged.values()]
-    generation_items = [{"id": generation_id, "on_instance": generation_on_instance(client, generation_id)} for generation_id in sorted(generations)]
-    kept_generations = [{"id": generation_id, "on_instance": generation_on_instance(client, generation_id), "proof": "a take of a project of the run that the run did not record"} for generation_id in others]
-    plan = {"run_id": run_id, "confirmed": confirm, "clock": clock, "projects": project_items, "generations": generation_items, "generations_kept": kept_generations, "files": files}
+    for record in records:
+        if record["kept"]:
+            for item in files:
+                if item["filename"] in record["filenames"] and item["attributed"]:
+                    item.update(attributed=False, proof=f"the project {record['project_id']} that uses it is kept: {record['kept']}")
+    generations = []
+    for record in records:
+        for generation_id, preset_id in record["generations"].items():
+            if generation_id in {item["id"] for item in generations}:
+                continue
+            item = {"id": generation_id, "engine": record["engine"], "preset_id": preset_id}
+            check_generation(client, item, span["window"], clock["margin_seconds"])
+            if record["kept"] and item["attributed"]:
+                item.update(attributed=False, proof=f"its project {record['project_id']} is kept: {record['kept']}")
+            generations.append(item)
+    for item in foreign:
+        if item["id"] not in {known["id"] for known in generations}:
+            generations.append({**item, "on_instance": generation_on_instance(client, item["id"]), "attributed": False, "proof": f"a take of the project {item['project']} that the run did not order"})
+    plan = {"run_id": run_id, "confirmed": confirm, "clock": clock, "account": current, "notes": notes, "refusals": refusals, "projects": project_items, "generations": generations, "files": files, "failed": False}
+    for line in notes + refusals:
+        log(line)
     for item in project_items:
-        state = "on the instance" if item["on_instance"] else "no longer on the instance"
-        log(f"project {item['id']}: {state}" + ("" if item["attributed"] else f", not attributed, kept: {item['proof']}"))
-    for item in generation_items:
-        log(f"generation {item['id']}: {'on the instance' if item['on_instance'] else 'no longer on the instance'}")
-    for item in kept_generations:
-        log(f"generation {item['id']}: not attributed, kept: {item['proof']}")
+        if not item["on_instance"]:
+            log(f"project {item['id']}: no longer on the instance")
+        else:
+            log(f"project {item['id']}: {'to delete, ' if item['attributed'] else 'not attributed, kept: '}{item['proof']}")
+    log_generations(generations, log, lambda item: "")
     log_files(files, log)
+    doomed_projects, kept_projects, gone_projects = split(project_items)
+    doomed, spared, absent = split(generations)
     delete, kept, gone = split(files)
-    live_projects = [item for item in project_items if item["on_instance"] and item["attributed"]]
-    live_generations = [item for item in generation_items if item["on_instance"]]
     if not confirm:
-        log(f"{len(live_projects)} projects, {len(live_generations)} generations and {len(delete)} files of {run_id} to delete: pass --confirm to delete them; not attributed and kept: {len(project_items) - len([item for item in project_items if item['attributed']])} projects, {len(kept_generations)} generations, {len(kept)} files; already gone: {len([item for item in project_items if not item['on_instance']])} projects, {len(generation_items) - len(live_generations)} generations, {len(gone)} files")
+        log(f"{len(doomed_projects)} projects, {len(doomed)} generations and {len(delete)} files of {run_id} to delete: pass --confirm to delete them; not attributed and kept: {len(kept_projects)} projects, {len(spared)} generations, {len(kept)} files; already gone: {len(gone_projects)} projects, {len(absent)} generations, {len(gone)} files" + ("; --confirm would refuse: " + "; ".join(refusals) if refusals else ""))
         return plan
-    try:
-        for item in live_projects:
-            try:
-                item["deleted"] = client.delete_json(f"{VP}/projects/{item['id']}", missing_ok=True) is not None
-            except FAILURES as error:
-                item["error"] = str(error) or type(error).__name__
-        for item in generation_items:
-            delete_generation(client, item)
-        for item in delete:
-            delete_upload(client, item)
-    finally:
-        plan["done_at"] = datetime.now(UTC).isoformat(timespec="seconds")
-        plan["trace"] = str(write_trace(run_dir, plan))
-    left = [item["id"] for item in generation_items if item.get("exists_after")]
-    files_left = [item["filename"] for item in delete if item.get("exists_after")]
-    errors = [item for item in project_items + generation_items + delete if item.get("error")]
-    log(f"{len(live_projects)} projects, {len(live_generations)} generations and {len(delete)} files of {run_id} deleted, {len(left)} generations and {len(files_left)} files still there, {len(errors)} errors; {len(kept)} files not attributed are kept")
+    if refusals:
+        raise RunRefused("; ".join(refusals))
+    path = trace_path(run_dir)
+    plan.update(state="deleting", started_at=datetime.now(UTC).isoformat(timespec="seconds"), trace=str(path))
+
+    def save() -> None:
+        save_trace(path, plan)
+
+    save()
+    stopped = delete_all(client, [(delete_project, item) for item in doomed_projects] + [(delete_generation, item) for item in doomed] + [(delete_upload, item) for item in delete], save)
+    counts = {"projects": tally(doomed_projects), "generations": tally(doomed), "files": tally(delete)}
+    plan.update(state="stopped" if stopped else "done", stopped=stopped, counts=counts, done_at=datetime.now(UTC).isoformat(timespec="seconds"), failed=bool(stopped) or any(value["not_deleted"] or value["not_tried"] for value in counts.values()))
+    save()
+    log(f"{run_id}: {counts['projects']['deleted']} of {len(doomed_projects)} projects, {counts['generations']['deleted']} of {len(doomed)} generations and {counts['files']['deleted']} of {len(delete)} files deleted; not deleted: {sum(value['not_deleted'] for value in counts.values())}; not tried: {sum(value['not_tried'] for value in counts.values())}; not attributed and kept: {len(kept_projects)} projects, {len(spared)} generations, {len(kept)} files" + (f"; {stopped}" if stopped else ""))
     return plan
 
 
@@ -1178,6 +1229,7 @@ def add_vp_parser(commands) -> None:
     clean.add_argument("run_dir", type=Path)
     clean.add_argument("--config", type=Path, default=Path("audit.toml"))
     clean.add_argument("--confirm", action="store_true")
+    clean.add_argument(UNRECORDED, action="store_true", help="with --confirm, delete for a run that recorded no account, without checking that this is its instance")
 
 
 def vp_command(args) -> int:
@@ -1192,8 +1244,8 @@ def vp_command(args) -> int:
     client = ApiClient(config.target.url, config.target.timeout_seconds)
     if args.vp_command == "cleanup":
         client.login(username, password)
-        cleanup(client, args.run_dir, args.confirm)
-        return EXIT_OK
+        plan = cleanup(client, args.run_dir, args.confirm, allow_unrecorded=args.allow_unrecorded_instance)
+        return EXIT_FAIL if plan["failed"] else EXIT_OK
     pack = load_pack(args.pack)
     matrix = load_matrix(args.matrix) if args.matrix else None
     names = [name.strip() for name in args.engines.split(",") if name.strip()] if args.engines else None

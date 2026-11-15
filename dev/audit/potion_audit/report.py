@@ -639,21 +639,29 @@ def _change(after, before) -> float | None:
     return round((after - before) / before, 3)
 
 
-def _stable(node):
+def _stable(node, models: dict, field: str | None = None):
     if isinstance(node, dict):
-        return {key: _stable(value) for key, value in node.items() if key != "url"}
+        return {key: _stable(value, models, key) for key, value in node.items() if key != "url"}
     if isinstance(node, list):
-        return [_stable(value) for value in node]
+        return [_stable(value, models, field) for value in node]
+    if isinstance(node, str) and node.startswith("model:"):
+        return models.get(field) or "<model>"
     if isinstance(node, str) and "uploads/" in node:
         return "<upload>"
     return node
 
 
-def request_changed(now: dict | None, then: dict | None) -> bool | None:
-    if not now or not then:
-        return None
-    return _stable({key: now.get(key) for key in ("mode", "prompts", "form_data")}) != _stable({key: then.get(key) for key in ("mode", "prompts", "form_data")})
+def model_names(result: dict | None) -> dict:
+    return {str(model["field"]): model.get("sha256") or model.get("filename") for model in (result or {}).get("models") or () if isinstance(model, dict) and model.get("field") and (model.get("sha256") or model.get("filename"))}
 
+
+def request_changed(now: Entry, then: Entry) -> bool | None:
+    if not now.request or not then.request:
+        return None
+    mine, theirs = model_names(now.result), model_names(then.result)
+    shared = set(mine) & set(theirs)
+    keys = ("mode", "prompts", "form_data")
+    return _stable({key: now.request.get(key) for key in keys}, {field: mine[field] for field in shared}) != _stable({key: then.request.get(key) for key in keys}, {field: theirs[field] for field in shared})
 
 
 def _first_media(entry: Entry) -> dict | None:
@@ -712,7 +720,7 @@ def compare_sets(current: RunSet, previous: RunSet) -> dict:
                 "vram_change_mb": vram,
                 "vram_flag": vram is not None and abs(vram) > VRAM_TOLERANCE_MB,
                 "ssim": _ssim(entry, old) if entry.result and old.result else {"value": None, "reason": "no output on one side"},
-                "request_changed": request_changed(entry.request, old.request),
+                "request_changed": request_changed(entry, old),
             }
         )
     missing = [key for key in before if key not in {entry.key for entry in current.entries}]

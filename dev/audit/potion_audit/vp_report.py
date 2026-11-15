@@ -284,7 +284,7 @@ def compare_scenarios(current: Scenario, previous: Scenario) -> dict:
     if changed_pack:
         settings.append(pack_line(changed_pack))
     return {
-        "previous": {"run_id": previous.run_id, "started_at": previous.data.get("started_at"), "app_version": previous.app_version},
+        "previous": {"run_id": previous.run_id, "started_at": previous.data.get("started_at"), "app_version": previous.app_version, "machine": previous.machine},
         "pack_change": changed_pack,
         "rows": rows,
         "only_in_previous": [key for key in before if key not in keys],

@@ -486,6 +486,7 @@ def run_five(vp_api, tmp_path, run_id: str) -> Path:
     pack = load_pack(DEFAULT_PACK)
     engines = select_engines(pack, None, ["Wan2.2-TI2V-5B-8GB"])
     run_scenario(logged_in(vp_api), pack, tmp_path / "out", run_id, engines, None, upscaler="rtx", interval=0.01, sleep=no_sleep, log=quiet)
+    vp_api.record_preset = False
     return tmp_path / "out" / run_id
 
 
@@ -572,13 +573,86 @@ def test_cleanup_keeps_a_project_found_by_its_name_only_and_a_take_the_run_did_n
     vp_api.vp_takes.append({**vp_api.vp_takes[0], "id": "T99", "generation_id": "G7", "status": "done", "polls": 9})
     lines = []
     plan = cleanup(logged_in(vp_api), run_dir, False, lines.append)
-    assert [(item["id"], item["attributed"]) for item in plan["projects"]] == [("P1", True), ("P9", False)]
-    assert [item["id"] for item in plan["generations"]] == ["G1"]
-    assert [(item["id"], item["proof"]) for item in plan["generations_kept"]] == [("G7", "a take of a project of the run that the run did not record")]
-    assert "project P9: on the instance, not attributed, kept: only its name starts with the prefix of the run, scenario.json does not record it" in lines
+    assert [(item["id"], item["attributed"]) for item in plan["projects"]] == [("P1", False), ("P9", False)]
+    assert plan["projects"][0]["proof"] == "it holds the take T99, which the run did not order: the project is kept, with everything the run made for it"
+    assert [(item["id"], item["attributed"]) for item in plan["generations"]] == [("G1", False), ("G7", False)]
+    assert plan["generations"][0]["proof"] == "its project P1 is kept: it holds the take T99, which the run did not order"
+    assert all(item["attributed"] is False for item in plan["files"])
+    assert "project P9: not attributed, kept: only its name starts with the prefix of the run, scenario.json does not record it" in lines
+    assert lines[-1].startswith("0 projects, 0 generations and 0 files of vp-8 to delete")
     cleanup(logged_in(vp_api), run_dir, True, quiet)
-    assert f"{VP}/projects/P9" not in vp_api.deleted and "/api/generations/history/G7" not in vp_api.deleted
-    assert set(vp_api.projects) == {"P9"}
+    assert vp_api.deleted == []
+    assert set(vp_api.projects) == {"P1", "P9"}
+
+
+def test_cleanup_keeps_a_project_the_operator_renamed(vp_api, tmp_path):
+    run_dir = run_five(vp_api, tmp_path, "vp-9")
+    vp_api.projects["P1"]["name"] = "my film"
+    plan = cleanup(logged_in(vp_api), run_dir, True, quiet)
+    assert plan["projects"][0]["proof"].startswith("its name is now 'my film', the run named it 'potion-audit vp-9 Wan2.2-TI2V-5B-8GB'")
+    assert [path for path in vp_api.deleted if path.startswith(VP) or "/history/" in path] == []
+    assert "/api/media/uploads/frame-4.png" not in vp_api.deleted and "/api/media/uploads/export-5.mp4" not in vp_api.deleted
+    assert "/api/media/uploads/1-lumi.jpg" not in vp_api.deleted
+
+
+def test_cleanup_confirm_refuses_a_scenario_with_no_end_and_the_listing_says_so(vp_api, tmp_path):
+    run_dir = run_five(vp_api, tmp_path, "vp-10")
+    scenario = json.loads((run_dir / "scenario.json").read_text(encoding="utf-8"))
+    scenario["ended_at"] = None
+    (run_dir / "scenario.json").write_text(json.dumps(scenario), encoding="utf-8")
+    lines = []
+    plan = cleanup(logged_in(vp_api), run_dir, False, lines.append)
+    assert plan["refusals"] == ["vp-10 recorded no end: it may still be running, so --confirm refuses it"]
+    assert lines[-1].endswith("; --confirm would refuse: vp-10 recorded no end: it may still be running, so --confirm refuses it")
+    with pytest.raises(RunRefused, match="recorded no end"):
+        cleanup(logged_in(vp_api), run_dir, True, quiet)
+    assert vp_api.deleted == [] and not (run_dir / "cleanup.json").exists()
+
+
+def test_cleanup_confirm_refuses_another_account_and_asks_an_option_for_a_run_without_one(vp_api, vp_config, credentials_env, tmp_path):
+    run_dir = run_five(vp_api, tmp_path, "vp-11")
+    vp_api.account_id = "01OTHERACCOUNT"
+    with pytest.raises(RunRefused, match="ran with another account or on another instance"):
+        cleanup(logged_in(vp_api), run_dir, True, quiet)
+    vp_api.account_id = "01FAKEACCOUNT"
+    scenario = json.loads((run_dir / "scenario.json").read_text(encoding="utf-8"))
+    scenario.pop("account")
+    (run_dir / "scenario.json").write_text(json.dumps(scenario), encoding="utf-8")
+    assert main(["vp", "cleanup", str(run_dir), "--config", str(vp_config), "--confirm"]) == 2
+    assert vp_api.deleted == []
+    assert main(["vp", "cleanup", str(run_dir), "--config", str(vp_config), "--confirm", "--allow-unrecorded-instance"]) == 0
+    assert f"{VP}/projects/P1" in vp_api.deleted
+
+
+def test_cleanup_stops_at_the_first_refused_deletion_writes_its_trace_first_and_fails(vp_api, vp_config, credentials_env, tmp_path, capsys):
+    run_dir = run_five(vp_api, tmp_path, "vp-12")
+    route = vp_api.route
+    seen = []
+
+    def expired(method, path, query, body, headers):
+        if method == "DELETE":
+            seen.append(json.loads((run_dir / "cleanup.json").read_text(encoding="utf-8"))["state"])
+            if path.startswith("/api/generations/history/"):
+                return 401, {"detail": "Could not validate credentials"}, "application/json"
+        return route(method, path, query, body, headers)
+
+    vp_api.route = expired
+    assert main(["vp", "cleanup", str(run_dir), "--config", str(vp_config), "--confirm"]) == 1
+    assert seen == ["deleting", "deleting"]
+    assert vp_api.deleted == [f"{VP}/projects/P1"]
+    trace = json.loads((run_dir / "cleanup.json").read_text(encoding="utf-8"))
+    assert (trace["state"], trace["failed"]) == ("stopped", True)
+    assert trace["counts"] == {"projects": {"deleted": 1, "not_deleted": 0, "not_tried": 0}, "generations": {"deleted": 0, "not_deleted": 1, "not_tried": 0}, "files": {"deleted": 0, "not_deleted": 0, "not_tried": 5}}
+    assert all(item["skipped"].startswith("not tried: the cleanup stopped after DELETE /api/generations/history/G1 answered HTTP 401") for item in trace["files"])
+    assert "vp-12: 1 of 1 projects, 0 of 1 generations and 0 of 5 files deleted; not deleted: 1; not tried: 5" in capsys.readouterr().out
+
+
+def test_a_scenario_refuses_to_start_in_a_folder_already_cleaned(vp_api, tmp_path):
+    run_dir = run_five(vp_api, tmp_path, "vp-13")
+    cleanup(logged_in(vp_api), run_dir, True, quiet)
+    pack = load_pack(DEFAULT_PACK)
+    with pytest.raises(RunRefused, match="holds the trace of a cleanup"):
+        run_scenario(logged_in(vp_api), pack, tmp_path / "out", "vp-13", select_engines(pack, None, ["Wan2.2-TI2V-5B-8GB"]), None, upscaler="rtx", interval=0.01, sleep=no_sleep, log=quiet)
 
 
 def test_cleanup_refuses_a_dry_run_and_keeps_an_earlier_trace(vp_api, vp_config, credentials_env, tmp_path):
