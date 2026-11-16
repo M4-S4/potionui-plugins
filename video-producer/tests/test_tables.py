@@ -11,7 +11,7 @@ _EXPECTED_COLUMNS = {
         "backend_id", "seed", "resolution", "status", "file_path", "thumb_path", "width", "height", "duration_s",
         "fps", "error_code", "error_message", "created_at", "finished_at", "director_mode", "model_id", "progress", "step",
         "variant", "chosen", "flag", "profile", "prompt_text", "file_id", "units_reserved", "started_at", "user_id",
-        "request", "label", "shot_revision", "priority", "chain", "chain_wait", "frame_role", "video_refs", "track_scale",
+        "request", "label", "shot_revision", "priority", "chain", "chain_wait", "frame_role", "video_refs", "track_scale", "frame_notes",
     ],
     "video_producer_jobs": [
         "id", "take_id", "generation_id", "limit_ref_id", "units_reserved", "started_at", "finished_at",
@@ -28,6 +28,7 @@ _EXPECTED_COLUMNS = {
         "backend_id", "progress", "step", "error_code", "error_message", "created_at", "started_at", "finished_at",
         "factor", "source_rendition_id",
     ],
+    "video_producer_frame_crops": ["key", "user_id", "source", "ratio", "value", "item_id", "width", "height", "source_bytes", "source_mtime", "created_at"],
 }
 
 _EXPECTED_INDEXES = {
@@ -78,8 +79,8 @@ def _indexes(db):
     return found
 
 
-def test_table_names_are_the_eight_plugin_tables():
-    assert len(TABLE_NAMES) == 8
+def test_table_names_are_the_nine_plugin_tables():
+    assert len(TABLE_NAMES) == 9
     assert set(TABLE_NAMES) == set(_EXPECTED_COLUMNS)
     assert all(name.startswith("video_producer_") for name in TABLE_NAMES)
 

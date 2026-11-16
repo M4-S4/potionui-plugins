@@ -2,7 +2,7 @@
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { t } from '../../i18n/index.svelte.js';
 	import { ui, doc, secs } from '../../lib/state.svelte.js';
-	import { labelTake, promoteToFinal, retryTake, cancelTake, deleteTake, showDetails, toggleCompare, findTake, backendName, presetById, upscaleAvailable } from '../../lib/production.svelte.js';
+	import { labelTake, promoteToFinal, retryTake, cancelTake, deleteTake, showDetails, toggleCompare, findTake, backendName, presetById, upscaleAvailable, notCroppedText } from '../../lib/production.svelte.js';
 	import { failureText, hasNativeEngine, isInFlight, presetLabel } from '../../lib/generation.js';
 	import { takeThumb } from '../../lib/media.js';
 	import { extractable, extractAtPlayhead, seamState } from '../../lib/seam.svelte.js';
@@ -153,6 +153,7 @@
 					{:else if cadence.state === 'slow' || cadence.state === 'failed'}
 						<button type="button" class="vp-tc shrink-0 rounded-sm border border-warning/60 px-1 text-2xs {cadence.state === 'failed' ? 'text-danger' : 'text-warning'} disabled:opacity-60" title={cadenceTip} data-take-cadence={cadence.state} disabled={interpolator === null || renditionStore.sending} onclick={() => conformTakes([take.id])}>{t('generation.card.cadence.conform', { fps: cadence.to })}</button>
 					{/if}
+					{#if take.frameNotes?.length}<span class="vp-tc shrink-0 rounded-sm border border-warning/60 px-1 text-2xs text-warning" title={take.frameNotes.map(notCroppedText).join(' ')} data-take-not-cropped>{t('generation.card.notCropped')}</span>{/if}
 					{#if stale}<span class="flex min-w-0 items-center gap-1 text-warning" title={t('generation.card.staleTip')}><Icon name="alert" class="h-3 w-3 shrink-0" /><span class="truncate">{t('generation.card.stale')}</span></span>{/if}
 				</div>
 				<details class="text-fg-subtle" data-take-details>

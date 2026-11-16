@@ -715,7 +715,7 @@ def build(user: User, doc: Mapping[str, Any], shot_id: str, order: Order) -> Key
             form[OUTPUT_SIZE] = size
         if _mismatch(size, aspect):
             built.warnings.append(
-                note("aspect_mismatch", "The image takes the aspect ratio of the first picture, not the one of the shot's takes.", aspect=_aspect_text(doc, aspect), size=size)
+                note("aspect_mismatch", "The image takes the aspect ratio of the first picture, not the one of the shot's takes: the take crops it at its centre.", aspect=_aspect_text(doc, aspect), size=size)
             )
         resolved = models.resolve_models(preset.id, mode, None, fields)
         form.update(resolved.values)

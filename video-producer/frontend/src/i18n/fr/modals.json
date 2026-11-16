@@ -44,7 +44,7 @@
 	"export.upscaled": "Les prises font au plus {size} : l’export en {frame} les agrandit.",
 	"export.exchangeFormat": "Format d’échange",
 	"export.noteFcpxml": "Séquence V1 avec les prises retenues, noms de plans et points d’entrée.",
-	"export.noteOtio": "Vidéo et pistes audio par rôle ; lisible par Resolve, Premiere (plugin) et Nuke Studio.",
+	"export.noteOtio": "Vidéo et pistes audio par rôle ; s’ouvre dans un logiciel de montage qui lit OpenTimelineIO.",
 	"export.noteEdl": "Liste de montage universelle (V1 seulement), pour l’étalonnage ou le conformage.",
 	"export.subtitlesNote": "Issus des titres de la timeline.",
 	"export.noSubtitles": "Aucun titre à sous-titrer.",

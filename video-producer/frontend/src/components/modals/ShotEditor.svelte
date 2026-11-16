@@ -6,7 +6,7 @@
 	import { takesOf, engineLabel, engineChoices, engineGroups, currentEngine, soundBehaviorOf, shotDurationLimit, settleRelease } from '../../lib/production.svelte.js';
 	import { PROFILES, aspectOf, draftResolution, finalResolution, optionKey, presetProfiles, withProfile } from '../../lib/generation.js';
 	import { chosenSize, formatValue, parseSize } from '../../lib/formats.js';
-	import { framed } from '../../lib/framing.js';
+	import { frameBox, framed } from '../../lib/framing.js';
 	import { SEED_MAX, randomSeed, validSeed } from '../../lib/engine.js';
 	import { engineTitle, refTypeLabel, shotReceptionIn } from '../../lib/references.js';
 	import { TAG_CLASS, typeIcon } from '../../lib/reftags.js';
@@ -485,8 +485,8 @@
 				<section class="space-y-1.5">
 					<div class="vp-section-title">{t('inspector.section.frames')}</div>
 					<div class="grid grid-cols-2 gap-2">
-						<MediaPicker title={t('inspector.frames.first')} value={draft.first} onpick={(v) => (draft.first = v)} />
-						<MediaPicker title={t('inspector.frames.last')} value={draft.last} onpick={(v) => (draft.last = v)} />
+						<MediaPicker title={t('inspector.frames.first')} value={draft.first} frame={frameBox(doc)} onpick={(v) => (draft.first = v)} />
+						<MediaPicker title={t('inspector.frames.last')} value={draft.last} frame={frameBox(doc)} onpick={(v) => (draft.last = v)} />
 					</div>
 					<HostUi name="Switch" props={{ id: 'vp-shot-keep-framing', checked: draft.keepFraming === true, size: 'lg', label: t('modals.shot.keepFraming'), onchange: (v) => (draft.keepFraming = Boolean(v)) }} />
 					<p class="text-xs text-fg-subtle" data-keep-framing>{draft.keepFraming && draft.last ? t('modals.shot.keepFramingLast') : t('modals.shot.keepFramingHint')}</p>

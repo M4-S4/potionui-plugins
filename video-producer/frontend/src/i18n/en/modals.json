@@ -44,7 +44,7 @@
 	"export.upscaled": "The takes are {size} at most: the export in {frame} enlarges them.",
 	"export.exchangeFormat": "Exchange format",
 	"export.noteFcpxml": "V1 sequence with the chosen takes, shot names and in points.",
-	"export.noteOtio": "Video and audio tracks by role; opens in Resolve, Premiere (plugin) and Nuke Studio.",
+	"export.noteOtio": "Video and audio tracks by role; opens in editing software that reads OpenTimelineIO.",
 	"export.noteEdl": "Universal edit list (V1 only), for grading or conforming.",
 	"export.subtitlesNote": "Taken from the titles of the timeline.",
 	"export.noSubtitles": "No title to subtitle.",

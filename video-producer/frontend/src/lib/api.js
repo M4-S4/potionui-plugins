@@ -377,8 +377,15 @@ export function normalizeTake(value) {
 		finishedAt: text(value.finished_at) || null,
 		chain: normalizeChain(value.chain),
 		frameRole: value.frame_role === 'first' || value.frame_role === 'last' ? value.frame_role : null,
-		videoRefs: list(value.video_refs, normalizeVideoRef) ?? []
+		videoRefs: list(value.video_refs, normalizeVideoRef) ?? [],
+		frameNotes: list(value.frame_notes, normalizeFrameNote) ?? []
 	};
+}
+
+function normalizeFrameNote(value) {
+	if (!isObject(value) || value.code !== 'frame_not_cropped' || !isObject(value.data)) return null;
+	const roles = Array.isArray(value.data.roles) ? value.data.roles.filter((role) => role === 'first' || role === 'last') : [];
+	return { shot_id: text(value.data.shot_id) || null, cause: text(value.data.cause) || 'failed', roles, chained: value.data.chained === true };
 }
 
 function normalizeVideoRef(value) {

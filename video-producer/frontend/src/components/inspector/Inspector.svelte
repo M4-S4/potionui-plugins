@@ -52,6 +52,7 @@
 	import { hostIconName } from '../../lib/icons.js';
 	import { MAX_SLICES, SLICE_MAX, SLICE_MIN, clipSoundAudible, laneCode, laneItemCount, laneTitle, shotCuts, sliceCuts, sliceLength, videoTrack } from '../../lib/tracks.js';
 	import { framesOf, roleKind } from '../../lib/seam.js';
+	import { frameBox } from '../../lib/framing.js';
 	import Tabs from '../shell/Tabs.svelte';
 	import SeamAction from '../takes/SeamAction.svelte';
 	import ChainSwitch from '../shots/ChainSwitch.svelte';
@@ -386,9 +387,9 @@
 									onclick={() => f && select('frame', f.id)}
 								>
 									{#if thumb}
-										<img src={thumb} alt="" class="aspect-video w-full object-cover" />
+										<img src={thumb} alt="" class="object-cover" style={frameBox(doc)} data-frame-thumb />
 									{:else}
-										<span class="flex aspect-video w-full items-center justify-center bg-surface-3 text-2xs text-fg-subtle">{t('inspector.frames.none')}</span>
+										<span class="flex items-center justify-center bg-surface-3 text-2xs text-fg-subtle" style={frameBox(doc)}>{t('inspector.frames.none')}</span>
 									{/if}
 									<span class="block truncate px-1.5 py-0.5 text-2xs text-fg-muted">{title}</span>
 								</button>

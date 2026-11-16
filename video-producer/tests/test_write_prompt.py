@@ -54,6 +54,8 @@ class Writer:
         self.root = None
         self.sizes = []
         self.entered = None
+        self.release = None
+        self.held = None
         monkeypatch.setattr(core_bridge, "prompt_writer_status", self.prompt_writer_status)
         monkeypatch.setattr(core_bridge, "write_prompt_for_preset", self.write_prompt_for_preset)
 
@@ -68,6 +70,8 @@ class Writer:
         self.calls.append({"user_id": user_id, "instruction": instruction, "preset_id": preset_id, "mode": mode, "form_data": form_data, "media": list(media)})
         if self.entered is not None:
             self.entered.set()
+        if self.release is not None and self.held in (None, user_id):
+            await asyncio.wait_for(_released(self.release), 10)
         if self.root is not None:
             self.sizes.append([(self.root / item["value"]).stat().st_size for item in media])
         if self.delay:
@@ -79,6 +83,11 @@ class Writer:
         if self.error is not None:
             raise self.error
         return dict(self.reply)
+
+
+async def _released(event):
+    while not event.is_set():
+        await asyncio.sleep(0.01)
 
 
 def _on_loop():
@@ -405,26 +414,29 @@ def test_one_user_writes_one_prompt_at_a_time_and_another_user_is_not_held(core,
     from fastapi import HTTPException
 
     core.use_h3()
-    writer = Writer(monkeypatch, delay=0.4)
+    writer = Writer(monkeypatch)
     doc, clip = _shot(core, make_doc)
     one, two = core.users["user-1"], core.users["user-2"]
 
     async def scenario():
-        writer.entered = asyncio.Event()
+        writer.entered, writer.release, writer.held = asyncio.Event(), asyncio.Event(), one.id
         first = asyncio.ensure_future(prompt_writer.write(one, one, doc, clip, "a", presets.MINIMAX_H3, None, ""))
         waiting = asyncio.ensure_future(writer.entered.wait())
         await asyncio.wait({first, waiting}, timeout=5, return_when=asyncio.FIRST_COMPLETED)
         assert writer.entered.is_set(), first.exception() if first.done() else "the first writer reached no language model call within 5 s"
         with pytest.raises(HTTPException) as busy:
             await prompt_writer.write(one, one, doc, clip, "b", presets.MINIMAX_H3, None, "")
-        other = await prompt_writer.write(two, two, doc, clip, "c", presets.MINIMAX_H3, None, "")
+        other = await asyncio.wait_for(prompt_writer.write(two, two, doc, clip, "c", presets.MINIMAX_H3, None, ""), 5)
+        first_held = not first.done()
+        writer.release.set()
         done = await first
         again = await prompt_writer.write(one, one, doc, clip, "d", presets.MINIMAX_H3, None, "")
-        return busy, other, done, again
+        return busy, other, first_held, done, again
 
-    busy, other, done, again = asyncio.run(scenario())
+    busy, other, first_held, done, again = asyncio.run(scenario())
 
     assert _error(busy) == (409, "write_busy")
+    assert first_held
     assert [other["text"], done["text"], again["text"]] == [WRITTEN, WRITTEN, WRITTEN]
     assert [call["instruction"][0] for call in writer.calls] == ["a", "c", "d"]
     assert prompt_writer.writing == set()
@@ -709,6 +721,7 @@ def test_a_core_call_that_outlives_the_grace_keeps_its_frame_until_it_ends(core,
     monkeypatch.setattr(prompt_writer, "POLL_S", 0.02)
     monkeypatch.setattr(prompt_writer, "GRACE_S", 0.05)
     seen = {}
+    ended = asyncio.Event()
 
     async def stubborn(user_id, instruction, *, preset_id=None, mode=None, form_data=None, media=()):
         shrunk = export_storage / media[0]["value"]
@@ -717,6 +730,7 @@ def test_a_core_call_that_outlives_the_grace_keeps_its_frame_until_it_ends(core,
         except asyncio.CancelledError:
             await asyncio.sleep(0.4)
             seen["frame_at_end"] = shrunk.exists()
+            ended.set()
         return {"text": WRITTEN}
 
     monkeypatch.setattr(core_bridge, "prompt_writer_status", lambda user_id: dict(READY))
@@ -733,7 +747,11 @@ def test_a_core_call_that_outlives_the_grace_keeps_its_frame_until_it_ends(core,
         with pytest.raises(HTTPException) as left:
             await prompt_writer.write(user, user, doc, clip, "a", presets.MINIMAX_H3, None, "", gone=gone)
         during = _writer_area(export_storage)
-        await asyncio.sleep(1.0)
+        await asyncio.wait_for(ended.wait(), 5)
+        for _ in range(100):
+            if not _writer_area(export_storage):
+                break
+            await asyncio.sleep(0.05)
         return left, during
 
     left, during = asyncio.run(scenario())
@@ -926,10 +944,10 @@ def test_only_a_real_introduction_line_is_taken_for_a_preamble(reply, kept):
 
 def test_the_route_refuses_a_second_writing_of_the_same_user_while_the_first_runs(core, client, make_doc, make_project, monkeypatch):
     import threading
-    import time
 
     core.use_h3()
-    writer = Writer(monkeypatch, delay=1.0)
+    writer = Writer(monkeypatch)
+    writer.entered, writer.release = threading.Event(), threading.Event()
     project = make_project(doc=_doc(core, make_doc))
     answers = {}
 
@@ -938,13 +956,12 @@ def test_the_route_refuses_a_second_writing_of_the_same_user_while_the_first_run
 
     running = threading.Thread(target=first)
     running.start()
-    for _ in range(200):
-        if writer.calls:
-            break
-        time.sleep(0.01)
+    entered = writer.entered.wait(10)
     second = _write(client, project["id"], _body(request="another"))
+    writer.release.set()
     running.join(10)
 
+    assert entered
     assert second.status_code == 409
     assert second.json()["detail"]["error"] == "write_busy"
     assert answers["first"].status_code == 200

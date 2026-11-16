@@ -102,7 +102,7 @@ Ctrl+click a shot (⌘+click on a Mac) to add it to the selection, and Shift+cli
 - **Shot prompt text**: what happens in the shot. Write it in English (chapter 15).
 - **Cast**: the characters and the place of the shot, from the bible. Under it, **Prompt sent to the engine** shows the whole prompt the shot will send.
 - **Dialogue**: the lines of the shot, each with its **Speaker**. MiniMax-H3 and LTX speak them with the mouth in sync; Wan and the cloud models leave them out.
-- **Duration** and **Frames**: the **First frame** and the **Last frame** the take should start and end on. **Keep the framing** sends the first frame as the last one too, so the camera keeps its framing.
+- **Duration** and **Frames**: the **First frame** and the **Last frame** the take should start and end on. An image in another shape than the film is cropped at its centre, and the two pictures show what stays; the deck warns before a take starts when the crop cuts a visible part (the user reference, Blocks and warnings, gives the thresholds). **Keep the framing** sends the first frame as the last one too, so the camera keeps its framing.
 - **References**: the project references the shot sends (tick **Exclude** to leave one out) and its own references, including sounds.
 - **Start and end images**: let an image model make a first or last frame from the pictures of the shot, or take them from the shots around it.
 - **Drafts**: how many takes one generation makes, 1 to 8.

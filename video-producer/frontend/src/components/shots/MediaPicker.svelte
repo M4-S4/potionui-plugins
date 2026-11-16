@@ -6,7 +6,7 @@
 	import { kitsAvailable, libraryAvailable, pickKitMany, pickKitMedia, pickMedia, pickLocalMedia, requireAll } from '../../lib/importer.js';
 	import Icon from '../Icon.svelte';
 
-	let { value = null, title, onpick, onpickall = null, removable = true, compact = false, kind = 'image', many = false } = $props();
+	let { value = null, title, onpick, onpickall = null, removable = true, compact = false, kind = 'image', many = false, frame = null } = $props();
 
 	let open = $state(false);
 	const video = $derived(kind === 'video');
@@ -39,9 +39,9 @@
 		onclick={() => (open = !open)}
 	>
 		{#if thumb}
-			<img src={thumb} alt="" class="aspect-video w-full object-cover" />
+			<img src={thumb} alt="" class={frame ? 'object-cover' : 'aspect-video w-full object-cover'} style={frame} data-frame-thumb={frame ? '' : undefined} />
 		{:else}
-			<span class="flex aspect-video w-full flex-col items-center justify-center gap-1 bg-surface-3 text-2xs text-fg-subtle"><Icon name={video ? 'film' : 'image'} class="h-4 w-4" />{video ? t('modals.shot.noVideo') : t('modals.shot.noImage')}</span>
+			<span class={frame ? 'flex flex-col items-center justify-center gap-1 bg-surface-3 text-2xs text-fg-subtle' : 'flex aspect-video w-full flex-col items-center justify-center gap-1 bg-surface-3 text-2xs text-fg-subtle'} style={frame}><Icon name={video ? 'film' : 'image'} class="h-4 w-4" />{video ? t('modals.shot.noVideo') : t('modals.shot.noImage')}</span>
 		{/if}
 		{#if !compact}<span class="block truncate px-1.5 py-0.5 text-2xs text-fg-muted">{title}{current ? ` · ${current.name}` : ''}</span>{/if}
 	</button>

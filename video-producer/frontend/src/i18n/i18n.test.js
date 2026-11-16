@@ -289,3 +289,8 @@ test('relative times count back from now in the locale, and never into the futur
 	assert.equal(formatRelative('en', 'not a date', now), '');
 	assert.equal(formatRelative('en', null, now), '');
 });
+
+test('the note of the OpenTimelineIO export says what reads the file, not which products do', () => {
+	assert.equal(dictionaries.en['modals.export.noteOtio'], 'Video and audio tracks by role; opens in editing software that reads OpenTimelineIO.');
+	assert.equal(dictionaries.fr['modals.export.noteOtio'], 'Vidéo et pistes audio par rôle ; s’ouvre dans un logiciel de montage qui lit OpenTimelineIO.');
+});

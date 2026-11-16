@@ -16,6 +16,7 @@ export default {
 	"box": [16, 9],
 	"social": { "formats": ["9:16", "4:5", "1:1"], "default": "9:16" },
 	"framing": { "modes": ["auto", "crop", "bars"], "default": "auto", "exact": 0.03, "crop": 0.3 },
+	"startImages": { "maxPixels": 64000000 },
 	"sizes": { "tolerance": 0.05, "draftMax": 600000, "finalShare": 0.5, "min": 64, "max": 8192, "grid": 8, "timeExponent": 1.2 },
 	"cadence": { "values": [24, 25, 30, 48, 50, 60], "default": 25, "slower": 0.1, "speeds": [1, 0.5, 0.25] },
 	"engines": {
