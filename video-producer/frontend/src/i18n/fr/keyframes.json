@@ -39,7 +39,7 @@
 	"note.shot_not_found": "Ce plan n’existe plus.",
 	"note.reference_unavailable": "« {name} » n’est pas une image que vous pouvez lire : elle est laissée de côté.",
 	"note.references_trimmed": "Le modèle prend {sent} des {found} images : le cadrage et les images de la distribution passent d’abord, les dernières des autres sont laissées de côté.",
-	"note.aspect_mismatch": "Les images seront en {size}, pas en {aspect} : mettez d’abord une image au cadre du projet, ou choisissez un modèle qui a une taille de sortie.",
+	"note.aspect_mismatch": "Les images seront en {size}, pas en {aspect} : une prise les recadre au centre. Mettez d’abord une image au cadre du projet, ou choisissez un modèle qui a une taille de sortie.",
 	"note.time_unknown": "Aucune candidate de ce modèle n’a encore été mesurée à cette taille.",
 	"note.vram_unknown": "La mémoire qu’une candidate demande n’a pas pu être estimée.",
 	"note.vram_stream": "Le modèle ne tient pas dans la mémoire GPU qu’il peut utiliser : il passera par la RAM, plus lentement.",

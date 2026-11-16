@@ -68,6 +68,7 @@ COLUMNS = (
     "chain_wait",
     "frame_role",
     "video_refs",
+    "frame_notes",
     "track_scale",
 )
 
@@ -114,6 +115,7 @@ PUBLIC = (
     "chain",
     "frame_role",
     "video_refs",
+    "frame_notes",
 )
 
 _ACTIVE_SQL = "status IN ('queued', 'running')"
@@ -165,6 +167,7 @@ def _take(row: Any) -> Dict[str, Any]:
     take["chain"] = json.loads(take["chain"]) if take["chain"] else None
     take["chain_wait"] = bool(take["chain_wait"])
     take["video_refs"] = json.loads(take["video_refs"]) if take["video_refs"] else None
+    take["frame_notes"] = json.loads(take["frame_notes"]) if take["frame_notes"] else None
     take["track_scale"] = track_scale(take)
     return take
 
@@ -225,6 +228,7 @@ def create_take(fields: Dict[str, Any]) -> Dict[str, Any]:
         "chain": json.dumps(take["chain"]) if take["chain"] else None,
         "chain_wait": int(bool(take["chain_wait"])),
         "video_refs": json.dumps(take["video_refs"]) if take["video_refs"] else None,
+        "frame_notes": json.dumps(take["frame_notes"]) if take["frame_notes"] else None,
     }
     with db.get_cursor() as cursor:
         cursor.execute(
@@ -514,13 +518,13 @@ def chain_waiting() -> List[Dict[str, Any]]:
     return _fetch_all(f"{_SELECT} WHERE {_CHAIN_WAIT_SQL} ORDER BY created_at, id")
 
 
-def take_frame(take_id: str, chain: Dict[str, Any], request: Dict[str, Any]) -> bool:
+def take_frame(take_id: str, chain: Dict[str, Any], request: Dict[str, Any], frame_notes: Optional[List[Dict[str, Any]]] = None) -> bool:
     """Record the first image a waiting take got and the request that carries it, the take joining the queue; False when it no longer waits."""
     from src.plugin_api import db
 
     with db.get_cursor() as cursor:
         cursor.execute(
-            f"UPDATE {TAKES} SET chain = ?, request = ?, chain_wait = 0 WHERE id = ? AND {_CHAIN_WAIT_SQL}",
-            (json.dumps(chain), json.dumps(request), take_id),
+            f"UPDATE {TAKES} SET chain = ?, request = ?, chain_wait = 0, frame_notes = COALESCE(?, frame_notes) WHERE id = ? AND {_CHAIN_WAIT_SQL}",
+            (json.dumps(chain), json.dumps(request), json.dumps(frame_notes) if frame_notes else None, take_id),
         )
         return cursor.rowcount == 1

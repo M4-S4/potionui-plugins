@@ -17,6 +17,7 @@
 	import ChainSwitch from '../shots/ChainSwitch.svelte';
 	import Icon from '../Icon.svelte';
 	import { shotNumberAt } from '../../lib/shots.js';
+	import { frameTile } from '../../lib/framing.js';
 
 	let { clip } = $props();
 
@@ -122,7 +123,7 @@
 			<span class="vp-label">{t('storyboard.quick.frames')}</span>
 			<div class="flex items-center gap-1.5 text-fg-subtle">
 				{#each [[first, t('storyboard.band.first')], [last, t('storyboard.band.last')]] as [image, caption], k (k)}
-					<button type="button" class="relative h-[50px] w-[88px] overflow-hidden rounded border border-line-strong {image?.src ? 'bg-black' : 'bg-surface-2'}" onclick={editor} title={t('storyboard.quick.framesTip')}>
+					<button type="button" class="relative shrink-0 overflow-hidden rounded border border-line-strong {image?.src ? 'bg-black' : 'bg-surface-2'}" style={frameTile(doc)} data-quick-frame onclick={editor} title={t('storyboard.quick.framesTip')}>
 						{#if image?.src}<img src={image.src} alt="" class="h-full w-full object-cover" />{:else}<Icon name="image" class="mx-auto h-3.5 w-3.5" />{/if}
 						<span class="absolute inset-x-0 bottom-0 truncate bg-black/60 px-1 text-left text-2xs text-white">{caption}</span>
 					</button>

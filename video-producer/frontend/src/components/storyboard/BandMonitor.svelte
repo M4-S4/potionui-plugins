@@ -14,6 +14,7 @@
 	import { clipFilter, colorPresetLabel } from '../../lib/look.js';
 	import { lutOf } from '../../lib/match.js';
 	import { aspectOf } from '../../lib/generation.js';
+	import { frameBox } from '../../lib/framing.js';
 	import Viewer from '../viewer/Viewer.svelte';
 	import MatchCanvas from '../viewer/MatchCanvas.svelte';
 	import SeamPanel from './SeamPanel.svelte';
@@ -65,7 +66,7 @@
 				>
 					{#each [[lastSrc, t('storyboard.band.endOf', { n: shotNumberAt(index - 1) }), prev, index - 1], [firstSrc, t('storyboard.band.startOf', { n: shotNumberAt(index) }), clip, index]] as [src, caption, shot, at], k (caption)}
 						{@const look = lutOf(shot)}
-						<div class="relative aspect-video w-full overflow-hidden rounded {src ? 'bg-black' : 'bg-surface-3 bg-[repeating-linear-gradient(135deg,rgb(var(--line-strong))_0_1px,transparent_1px_10px)]'}" style:grid-area="still{k}">
+						<div class="relative overflow-hidden rounded {src ? 'bg-black' : 'bg-surface-3 bg-[repeating-linear-gradient(135deg,rgb(var(--line-strong))_0_1px,transparent_1px_10px)]'}" style={frameBox(doc, '18rem')} style:grid-area="still{k}" data-seam-still>
 							{#if src}<img bind:this={stills[k]} {src} alt="" class="h-full w-full object-cover" style:filter={clipFilter(shot)} />{/if}
 							{#if src && look && stills[k]}<MatchCanvas source={stills[k]} lut={look} filter={clipFilter(shot)} cover />{/if}
 							<span class="absolute bottom-1.5 left-1.5 rounded bg-black/65 px-1.5 text-2xs text-white">{caption}</span>

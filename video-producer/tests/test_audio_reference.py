@@ -157,16 +157,34 @@ def measured(monkeypatch):
     return commands
 
 
+async def _together(state):
+    if not state["together"]:
+        return
+    loop = asyncio.get_running_loop()
+    if state.get("loop") is not loop:
+        state["loop"], state["full"] = loop, asyncio.Event()
+    full = state["full"]
+    if state["running"] >= state["together"]:
+        full.set()
+    try:
+        await asyncio.wait_for(full.wait(), 5)
+    except TimeoutError:
+        full.set()
+
+
 @pytest.fixture
 def slow_peaks(monkeypatch):
-    state = {"running": 0, "most": 0, "calls": []}
+    state = {"running": 0, "most": 0, "calls": [], "together": 0}
 
     async def peak(command):
         state["calls"].append(command)
         state["running"] += 1
         state["most"] = max(state["most"], state["running"])
-        await asyncio.sleep(0.05)
-        state["running"] -= 1
+        try:
+            await _together(state)
+            await asyncio.sleep(0.05)
+        finally:
+            state["running"] -= 1
         return -91.0
 
     monkeypatch.setattr(soundtrack, "peak", peak)
@@ -188,13 +206,14 @@ def uploads(monkeypatch):
 
 @pytest.fixture
 def ffmpeg_runs(monkeypatch):
-    state = {"running": 0, "most": 0}
+    state = {"running": 0, "most": 0, "together": 0}
     assemble = soundtrack.assemble
 
     async def counted(command, *args, **kwargs):
         state["running"] += 1
         state["most"] = max(state["most"], state["running"])
         try:
+            await _together(state)
             return await assemble(command, *args, **kwargs)
         finally:
             state["running"] -= 1
@@ -978,6 +997,7 @@ def test_overlapping_estimates_share_each_measure_and_at_most_four_run_at_a_time
     user = core.users["user-1"]
     doc = _doc(make_doc, [_item("v", "A1", 0, 8)], reference_lanes=("A1",))
     cuts = [TrackCut(f"s{index}", "A1", index * 0.5, index * 0.5 + 3) for index in range(10)]
+    slow_peaks["together"] = soundtrack.MEASURES
 
     async def both():
         return await asyncio.gather(*(soundtrack.silent_lanes(user, "p-1", doc, cuts) for _ in range(2)))
@@ -1030,7 +1050,7 @@ def test_the_sounds_of_the_shots_are_cut_four_at_a_time_into_the_uploads_and_req
         monkeypatch.setattr(soundtrack, "MEASURES", slots)
         plans = copy.deepcopy(planned)
         uploads.clear()
-        ffmpeg_runs["most"] = 0
+        ffmpeg_runs["most"], ffmpeg_runs["together"] = 0, slots
         asyncio.run(soundtrack.attach_all(core.users["user-1"], project, plans))
         forms = [plan.request["form_data"].get("references") or plan.request["form_data"]["video_director"]["audio"] for plan in plans]
         runs[slots] = (list(uploads), forms, ffmpeg_runs["most"])
@@ -1048,16 +1068,23 @@ def test_the_sounds_of_the_shots_are_cut_four_at_a_time_into_the_uploads_and_req
 
 @pytest.fixture
 def failing_cuts(monkeypatch, tmp_path):
-    state = {"started": [], "cancelled": [], "delays": {}, "failures": {}}
+    state = {"started": [], "cancelled": [], "failed": [], "delays": {}, "failures": {}, "after": {}}
+
+    async def failed(other):
+        while other not in state["failed"]:
+            await asyncio.sleep(0.005)
 
     async def cut(ffmpeg, sources, lanes, start, end, name, references=(), rate=48000):
         state["started"].append(name)
         try:
             await asyncio.sleep(state["delays"].get(name, 0.01))
+            if name in state["after"]:
+                await asyncio.wait_for(failed(state["after"][name]), 5)
         except asyncio.CancelledError:
             state["cancelled"].append(name)
             raise
         if name in state["failures"]:
+            state["failed"].append(name)
             raise soundtrack.SoundError(state["failures"][name], f"{name} failed.")
         path = sources.folder / f"{name}.wav"
         _tone(path, 0.05)
@@ -1073,13 +1100,15 @@ def test_the_first_sound_that_fails_in_the_order_of_the_shots_blocks_and_nothing
     _media(core)
     doc = _shots_doc(make_doc, 4, references=[HERO], assets=("voice", "music", "hero"), mode="Ref2VA")
     plans = director.build_plans(core.users["user-1"], doc, ["s1", "s2", "s3", "s4"], presets.MINIMAX_H3, "draft").shots
-    failing_cuts["delays"] = {"vp-sound-shot-02-a2": 0.3, "vp-sound-shot-04-a1": 0.0}
+    failing_cuts["delays"] = {"vp-sound-shot-04-a1": 0.0}
+    failing_cuts["after"] = {"vp-sound-shot-02-a2": "vp-sound-shot-04-a1"}
     failing_cuts["failures"] = {"vp-sound-shot-02-a2": "audio_cut_failed", "vp-sound-shot-04-a1": "audio_source_missing"}
 
     with pytest.raises(generation.Blocked) as caught:
         asyncio.run(generation.with_sound(core.users["user-1"], {"id": "p-1", "doc": doc}, plans))
 
     assert caught.value.blocks == [{"code": "audio_cut_failed", "message": "vp-sound-shot-02-a2 failed.", "data": {"shot_id": "s2"}}]
+    assert failing_cuts["failed"] == ["vp-sound-shot-04-a1", "vp-sound-shot-02-a2"]
     assert [name for name, _ in uploads] == ["vp-sound-shot-01-a1.wav", "vp-sound-shot-01-a2.wav", "vp-sound-shot-02-a1.wav"]
     assert len(failing_cuts["started"]) == 8 and plans[0].request["form_data"]["references"][0] == "uploads/vp-sound-shot-01-a1.wav"
     assert plans[1].request["form_data"]["references"][0] == "track:A1"

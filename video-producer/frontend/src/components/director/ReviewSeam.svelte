@@ -8,6 +8,7 @@
 	import { takeStore } from '../../lib/takes.svelte.js';
 	import { clipThumb } from '../../lib/media.js';
 	import { clipFilter } from '../../lib/look.js';
+	import { frameBox } from '../../lib/framing.js';
 	import { compareSeamHere, openSeam } from '../../lib/band.svelte.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import SeamPanel from '../storyboard/SeamPanel.svelte';
@@ -32,7 +33,7 @@
 	<div class="grid grid-cols-2 gap-1.5">
 		{#each sides as side (side.shot.id)}
 			<figure class="min-w-0 space-y-1">
-				<span class="block aspect-video w-full overflow-hidden rounded bg-surface-3">{#if side.src}<img src={side.src} alt="" class="h-full w-full object-cover" style:filter={clipFilter(side.shot)} />{/if}</span>
+				<span class="block overflow-hidden rounded bg-surface-3" style={frameBox(doc)} data-seam-still>{#if side.src}<img src={side.src} alt="" class="h-full w-full object-cover" style:filter={clipFilter(side.shot)} />{/if}</span>
 				<figcaption class="line-clamp-2 text-2xs text-fg-subtle">{side.caption}</figcaption>
 			</figure>
 		{/each}

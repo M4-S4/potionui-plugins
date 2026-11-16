@@ -237,7 +237,8 @@ async def start(owner: User, project: Mapping[str, Any], evaluation: Evaluation)
         raise Blocked(evaluation.payload["blocks"])
     planned = evaluation.planned
     await generation.with_sound(owner, project, [item.plan for item in planned])
-    await generation.with_first(owner, [(item.source, item.plan) for item in planned])
+    await generation.with_first(owner, project, [(item.source, item.plan) for item in planned])
+    await generation.with_frames(owner, project, [item.plan for item in planned])
     with generation.reserving(owner, sum(item.minutes for item in planned if item.native)) as reserve:
         created = [
             generation.create_final(

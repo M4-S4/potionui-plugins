@@ -3,7 +3,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
-from . import chainvideo, core_bridge, director, frame_grab, projects, takes
+from . import chainvideo, core_bridge, director, frame_grab, framefit, projects, takes
 from .catalog import REF2VA
 from .frame_grab import FrameError
 from .core_bridge import LimitExceeded, MediaRefError
@@ -192,9 +192,20 @@ async def take_frame(take: Mapping[str, Any], fail: Fail) -> bool:
     media = frame_grab.media_of(frame)
     if media is None:
         return fail(take, "chain_frame_failed", "The last image of the previous shot was stored but its library item cannot be found.")
-    request = swap(copy.deepcopy(take.get("request") or {}), director.chain_value(wait["previous"]), frame["value"])
+    value = frame["value"]
+    notes: List[Dict[str, Any]] = []
+    ratio = framefit.request_ratio(take.get("resolution"), take.get("request"))
+    if ratio is not None and frame.get("ref"):
+        try:
+            fitted = await framefit.fit(owner, value, frame["ref"], ratio, frame.get("filename") or "")
+        except framefit.CropError as exc:
+            notes.append(director.not_cropped(take["shot_id"], exc.cause, ["first"], True))
+            fitted = None
+        if fitted is not None:
+            value = fitted.value
+    request = swap(copy.deepcopy(take.get("request") or {}), director.chain_value(wait["previous"]), value)
     taken = {**wait, "state": TAKEN, "source": frame["source"], "frame": media}
-    return takes.take_frame(take["id"], taken, request)
+    return takes.take_frame(take["id"], taken, request, [*(take.get("frame_notes") or []), *notes] if notes else None)
 
 
 async def take_frames(fail: Fail) -> int:

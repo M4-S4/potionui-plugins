@@ -126,6 +126,19 @@ _COLUMNS = {
         factor INTEGER,
         source_rendition_id TEXT
     """,
+    "video_producer_frame_crops": """
+        key TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        source TEXT NOT NULL,
+        ratio TEXT NOT NULL,
+        value TEXT NOT NULL,
+        item_id TEXT,
+        width INTEGER NOT NULL,
+        height INTEGER NOT NULL,
+        source_bytes INTEGER,
+        source_mtime INTEGER,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    """,
 }
 
 TABLE_NAMES = tuple(_COLUMNS)
@@ -156,6 +169,7 @@ _ADDED_COLUMNS: Tuple[Tuple[str, str, str], ...] = (
     ("video_producer_takes", "frame_role", "TEXT"),
     ("video_producer_takes", "video_refs", "TEXT"),
     ("video_producer_takes", "track_scale", "REAL"),
+    ("video_producer_takes", "frame_notes", "TEXT"),
     ("video_producer_export_jobs", "stems", "INTEGER NOT NULL DEFAULT 0"),
     ("video_producer_export_jobs", "ratio", "TEXT"),
     ("video_producer_renditions", "factor", "INTEGER"),
@@ -178,6 +192,13 @@ _INDEXES = (
     ("idx_video_producer_renditions_generation", "video_producer_renditions", "generation_id"),
     ("idx_video_producer_renditions_status", "video_producer_renditions", "status, created_at"),
 )
+
+
+def create_table(name: str) -> None:
+    from src.plugin_api import db
+
+    with db.get_cursor() as cursor:
+        cursor.execute(f"CREATE TABLE IF NOT EXISTS {name} ({_COLUMNS[name]})")
 
 
 def create_tables() -> None:

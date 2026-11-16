@@ -39,7 +39,7 @@
 	"note.shot_not_found": "This shot no longer exists.",
 	"note.reference_unavailable": "“{name}” is not an image you can read: it is left out.",
 	"note.references_trimmed": "The model takes {sent} of the {found} pictures: the framing and the pictures of the cast come first, the last of the others are left out.",
-	"note.aspect_mismatch": "The images will be {size}, not {aspect}: put a picture in the frame of the project first, or choose a model with an output size.",
+	"note.aspect_mismatch": "The images will be {size}, not {aspect}: a take crops them at their centre. Put a picture in the frame of the project first, or choose a model with an output size.",
 	"note.time_unknown": "No candidate of this model was measured at this size yet.",
 	"note.vram_unknown": "The memory a candidate needs could not be estimated.",
 	"note.vram_stream": "The model does not fit in the GPU memory it may use: it will stream through host RAM, slower.",
