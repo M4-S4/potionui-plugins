@@ -47,7 +47,8 @@ H265_OFF = (
 ENCODE_SECONDS = 1800.0
 H265_SHARE = 0.6
 H265_PIXELS_PER_THREAD_SECOND = 2_500_000
-H265_SAMPLES = (0.25, 0.5, 0.75)
+H265_SAMPLES = (0.0, 0.5, 0.75)
+PLACEMENT_SLACK = 1.05
 H265_SAMPLE_SECONDS = 2.0
 H265_SAMPLE_FRAMES = 120
 CAP_FALLBACK_RATE = 60.0
@@ -146,6 +147,15 @@ def sample_starts(seconds: float, length: float) -> list[float]:
     return [min(max(0.0, seconds * point - length / 2), max(0.0, seconds - length)) for point in H265_SAMPLES]
 
 
+def placement_seconds(durations, frames: Optional[int], rate: Optional[float]) -> Optional[float]:
+    known = [value for value in durations if value and value > 0]
+    if frames and rate and rate > 0:
+        filled = frames / rate
+        fitting = [value for value in known if value <= filled * PLACEMENT_SLACK]
+        return max(fitting) if fitting else filled
+    return min(known) if known else None
+
+
 def sample_frames(frames: int, seconds: float) -> int:
     wanted = math.ceil(frames * H265_SAMPLE_SECONDS / seconds) if seconds > 0 else H265_SAMPLE_FRAMES
     return max(1, min(wanted, H265_SAMPLE_FRAMES, frames // len(H265_SAMPLES) or 1))
@@ -232,6 +242,12 @@ class ConvertVideo(MediaTool):
                 counted = count_frames(media.path, picture.index, ctx.is_cancelled)
                 guard(ctx)
                 frames = counted or math.ceil(seconds * (picture.rate or media.fps or CAP_FALLBACK_RATE) * FRAME_SLACK) + 2
+                seconds = min(
+                    placement_seconds(
+                        (media.duration, streams.duration, picture.duration), counted, picture.rate or media.fps,
+                    ) or seconds,
+                    seconds,
+                )
                 check_h265_time(
                     ctx.scoped(0.0, 0.05),
                     lambda start, count: [

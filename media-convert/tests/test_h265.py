@@ -163,7 +163,7 @@ def test_a_long_video_is_timed_on_three_parts_with_the_same_threads_and_pool(ctx
     *samples, encode = ctx.commands
     assert len(samples) == 3
     starts = [float(sample[sample.index("-ss") + 1]) for sample in samples]
-    assert starts == pytest.approx([2.0, 5.0, 8.0], abs=0.05)
+    assert starts == pytest.approx([0.0, 5.0, 8.0], abs=0.05)
     for sample in samples:
         assert sample[-3:] == ["-f", "null", "-"] and "-an" in sample
         assert sample.index("-ss") < sample.index("-i") and "-t" not in sample[:sample.index("-i")]
@@ -261,7 +261,7 @@ def test_a_processor_limit_on_the_container_bounds_the_cores(tmp_path, monkeypat
     assert video.server_cores() == cores
 
 
-@pytest.mark.parametrize("quota, cores", [("300000", 3), ("-1", 24)])
+@pytest.mark.parametrize("quota, cores", [("300000", 3), ("-1", 24), ("abc", 24), ("", 24), ("1.5", 24)])
 def test_the_older_processor_limit_files_are_read_too(tmp_path, monkeypatch, quota, cores):
     (tmp_path / "quota").write_text(quota + "\n", encoding="ascii")
     (tmp_path / "period").write_text("100000\n", encoding="ascii")
@@ -339,8 +339,44 @@ def test_a_file_that_states_a_shorter_length_is_timed_across_its_whole_picture(c
     convert(ctx, path)
 
     samples = ctx.commands[:3]
-    assert [float(sample[sample.index("-ss") + 1]) for sample in samples] == pytest.approx([4.0, 9.0, 14.0], abs=0.05)
+    assert [float(sample[sample.index("-ss") + 1]) for sample in samples] == pytest.approx([0.0, 9.0, 14.0], abs=0.05)
     assert [sample[sample.index("-frames:v") + 1] for sample in samples] == ["50"] * 3
+
+
+@pytest.mark.parametrize("tag", [False, True])
+def test_a_file_that_states_a_longer_length_is_timed_where_its_picture_is(ctx, source_dir, allowed, monkeypatch, tag):
+    path = lying_length(source_dir, seconds=20, stated=600, tag=tag)
+    assert ctx.probe(path, "video").duration == pytest.approx(600.0)
+    monkeypatch.setattr(video, "H265_PIXELS_PER_THREAD_SECOND", 1)
+
+    convert(ctx, path)
+
+    samples = ctx.commands[:3]
+    starts = [float(sample[sample.index("-ss") + 1]) for sample in samples]
+    counts = [int(sample[sample.index("-frames:v") + 1]) for sample in samples]
+    assert starts[0] == 0.0
+    assert all(start + count / 25 <= 20.0 for start, count in zip(starts, counts))
+    assert starts == pytest.approx([0.0, 9.0, 14.0], abs=0.05)
+
+
+def test_a_part_that_starts_at_the_beginning_always_holds_frames(monkeypatch):
+    calls = sampled(monkeypatch, [0.0] * 6, frames=1000, seconds=100.0).calls
+
+    assert [call[call.index("-ss") + 1] for call in calls][0] == "0.000"
+
+
+@pytest.mark.parametrize("durations, frames, rate, seconds", [
+    ((1.0, 20.0, 20.0), 500, 25.0, 20.0),
+    ((600.0, 20.0, None), 500, 25.0, 20.0),
+    ((600.0, 600.0, 600.0), 500, 25.0, 20.0),
+    ((3.0, 3.0, 3.0), 150, 1.0, 3.0),
+    ((600.0, 20.0), None, 25.0, 20.0),
+    ((None, None), None, None, None),
+    ((12.0,), 300, None, 12.0),
+    ((20.5, 40.0), 500, 25.0, 20.5),
+])
+def test_the_parts_are_placed_on_the_length_the_counted_frames_can_fill(durations, frames, rate, seconds):
+    assert video.placement_seconds(durations, frames, rate) == (pytest.approx(seconds) if seconds else None)
 
 
 def test_cancelling_while_the_frames_are_counted_stops_h265_before_any_encoding(tmp_path, source_dir, allowed, monkeypatch, no_grants):

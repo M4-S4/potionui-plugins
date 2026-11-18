@@ -160,7 +160,12 @@ def lying_rate(folder):
     return path
 
 
-def lying_length(folder, *, seconds=20, stated=1):
+def clock_text(seconds):
+    whole = int(seconds)
+    return f"{whole // 3600:02d}:{whole % 3600 // 60:02d}:{whole % 60:02d}.000000000".encode("ascii")
+
+
+def lying_length(folder, *, seconds=20, stated=1, tag=False):
     honest = folder / "long-honest.mkv"
     run_ffmpeg(
         "-f", "lavfi", "-i", f"testsrc2=size=64x48:rate=25:duration={seconds}",
@@ -172,6 +177,11 @@ def lying_length(folder, *, seconds=20, stated=1):
     if at < 0:
         pytest.skip("this ffmpeg writes no eight-byte segment duration")
     data[at + 3:at + 11] = struct.pack(">d", stated * 1000.0)
+    if tag:
+        mark = data.find(clock_text(seconds))
+        if mark < 0:
+            pytest.skip("this ffmpeg writes no DURATION tag")
+        data[mark:mark + len(clock_text(seconds))] = clock_text(stated)
     path = folder / "short-liar.mkv"
     path.write_bytes(bytes(data))
     return path
