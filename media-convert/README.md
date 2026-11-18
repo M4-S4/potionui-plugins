@@ -40,7 +40,7 @@ The result is a new item in the Library, next to the original, which stays as it
 
 The tool window always saves a new item and never offers to replace the original. A request from the chat, the automation or the API can still ask to replace an image, a video or a sound by its conversion. The replaced item can then keep its old name and extension over the new content, such as `Cat.png` holding a WebP picture, and a download or a zip export of the Library carries that name along.
 
-![The Convert video window on a 1920 × 1080 clip of 20 seconds: format MP4 (H.264) among MP4 (H.264), MOV (H.264), WebM (VP9) and MP4 (H.265), with the note that MP4 (H.265) works only when an admin allows it, which is off on this server; quality Balanced, original size, Keep metadata on](https://raw.githubusercontent.com/M4-S4/potionui-plugins/main/media-convert/docs/screenshots/convert-video-dark.webp)
+![The Convert video window on a 1920 × 1080 clip of 20 seconds: format MP4 (H.264) among MP4 (H.264), MOV (H.264), WebM (VP9) and MP4 (H.265), with the note that MP4 (H.265) works only when an admin allows it; quality Balanced, original size, Keep metadata on](https://raw.githubusercontent.com/M4-S4/potionui-plugins/main/media-convert/docs/screenshots/convert-video-dark.webp)
 
 ![The Library after the conversion: Test clip.webm, marked new, next to Test clip.mp4, which stays as it was](https://raw.githubusercontent.com/M4-S4/potionui-plugins/main/media-convert/docs/screenshots/result-dark.webp)
 
