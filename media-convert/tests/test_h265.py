@@ -303,8 +303,8 @@ def test_the_shortcut_takes_the_frames_counted_in_a_file_that_states_too_low_a_r
     path = lying_rate(source_dir)
     assert common.read_streams(path).video.rate == pytest.approx(1.0)
     monkeypatch.setattr(video, "usable_threads", lambda: 1)
-    monkeypatch.setattr(video, "encode_budget", lambda ctx: 1.0)
-    monkeypatch.setattr(video, "H265_PIXELS_PER_THREAD_SECOND", 320 * 240 * 10)
+    monkeypatch.setattr(video, "encode_budget", lambda ctx: 1000.0)
+    monkeypatch.setattr(video, "H265_PIXELS_PER_THREAD_SECOND", 320 * 240 * 10 / 1000.0)
 
     convert(ctx, path)
 
