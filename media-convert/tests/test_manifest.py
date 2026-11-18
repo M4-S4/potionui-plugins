@@ -6,12 +6,12 @@ from src.plugin_api.media import upload_formats
 from src.plugin_api.media_tools import InvalidToolParams, MediaTool
 
 import tools
-from tools import animation, common
+from tools import animation, common, lighten
 
 from . import conftest
 from .conftest import MANIFEST, PLUGIN_ROOT, TOOLS, make_video, need_encoders, params_for
 
-ICONS_ON_BOTH_CORES = {"image", "film", "audio", "editor-music", "play"}
+ICONS_ON_BOTH_CORES = {"image", "film", "audio", "editor-music", "play", "shrink"}
 
 SUFFIXES = {
     "media-convert.image": ("image", common.IMAGE_FORMATS),
@@ -20,7 +20,7 @@ SUFFIXES = {
     "media-convert.extract-audio": ("audio", common.AUDIO_FORMATS),
     "media-convert.animation": ("image", animation.ANIMATION_FORMATS),
 }
-ALL_TOOLS = sorted(SUFFIXES)
+ALL_TOOLS = sorted([*SUFFIXES, "media-convert.lighten"])
 QUALITY_TOOLS = sorted(SUFFIXES)
 
 
@@ -37,7 +37,7 @@ def test_the_manifest_names_the_plugin_and_its_version():
     assert "pages" not in MANIFEST and "api" not in MANIFEST
 
 
-def test_there_are_five_python_tools_without_a_component():
+def test_there_are_six_python_tools_without_a_component():
     assert sorted(TOOLS) == ALL_TOOLS
     for entry in TOOLS.values():
         assert entry["python"] and "component" not in entry
@@ -47,6 +47,7 @@ def test_there_are_five_python_tools_without_a_component():
 def test_no_tool_offers_replace_so_the_library_name_follows_the_new_format():
     for tool_id, (kind, _) in SUFFIXES.items():
         assert TOOLS[tool_id]["produces"] == kind
+    assert TOOLS["media-convert.lighten"]["produces"] == "video"
     assert all(entry["produces"] != "same" for entry in TOOLS.values())
 
 
@@ -57,6 +58,7 @@ def test_tools_show_in_the_library_and_the_history_only():
 
 def test_the_new_tools_take_videos():
     assert TOOLS["media-convert.animation"]["accepts"] == ["video"]
+    assert TOOLS["media-convert.lighten"]["accepts"] == ["video"]
 
 
 def test_extracting_the_sound_needs_a_video_with_sound():
@@ -99,6 +101,7 @@ def test_defaults_validate_through_the_core_rules():
     assert params_for("media-convert.animation") == {
         "format": "gif", "start": 0, "length": 10, "max_side": 480, "frame_rate": "full", "quality": "balanced",
     }
+    assert params_for("media-convert.lighten") == {"target": 16, "keep_sound": True, "keep_metadata": False}
 
 
 def test_lossless_formats_hide_the_quality_and_jpeg_alone_shows_the_background():
@@ -127,6 +130,13 @@ def test_the_animation_form_matches_the_code():
     )
     with pytest.raises(InvalidToolParams):
         params_for("media-convert.animation", start=-1)
+
+
+def test_the_lighten_form_matches_the_code():
+    assert options("media-convert.lighten", "target") == list(lighten.TARGETS_MB)
+    assert params_for("media-convert.lighten")["target"] == lighten.DEFAULT_TARGET_MB
+    with pytest.raises(InvalidToolParams):
+        params_for("media-convert.lighten", target=25)
 
 
 def test_the_settings_match_the_code_defaults():

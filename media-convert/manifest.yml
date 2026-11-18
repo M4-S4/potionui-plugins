@@ -269,3 +269,36 @@ media_tools:
           - { label: "High", value: high }
           - { label: "Balanced", value: balanced }
           - { label: "Small", value: small }
+
+  - id: "media-convert.lighten"
+    label: "Lighten for sending"
+    description: "Save the video as an MP4 (H.264) under a size you choose, to send it by message or email"
+    icon: "shrink"
+    accepts: [video]
+    produces: video
+    cardinality: one_to_one
+    scopes: [library, history]
+    python: "tools/lighten.py:LightenVideo"
+    params:
+      - name: target
+        type: select
+        label: "Largest size"
+        default: 16
+        description: "A video already lighter than this, in MP4 or MOV with an H.264 picture and AAC sound, is copied without being encoded again."
+        options:
+          - { label: "8 MB", value: 8 }
+          - { label: "16 MB", value: 16 }
+          - { label: "18 MB", value: 18 }
+          - { label: "20 MB", value: 20 }
+          - { label: "30 MB", value: 30 }
+          - { label: "50 MB", value: 50 }
+      - name: keep_sound
+        type: checkbox
+        label: "Keep the sound"
+        default: true
+        description: "Off, the result has no sound and leaves more room for the picture."
+      - name: keep_metadata
+        type: checkbox
+        label: "Keep metadata"
+        default: false
+        description: "Off by default, so that the place where the video was filmed does not leave with it. On, the title and the other tags are kept too."

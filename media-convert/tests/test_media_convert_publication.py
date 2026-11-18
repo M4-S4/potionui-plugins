@@ -111,10 +111,10 @@ class Library:
         return [path for path in found if path and (self.uploads / path).is_file()]
 
 
-def test_the_five_tools_register_from_the_manifest_for_the_library_and_the_history(library):
+def test_the_six_tools_register_from_the_manifest_for_the_library_and_the_history(library):
     ours = {
         "media-convert.image", "media-convert.video", "media-convert.audio", "media-convert.extract-audio",
-        "media-convert.animation",
+        "media-convert.animation", "media-convert.lighten",
     }
     for scope in ("library", "history"):
         listed = {tool.id: tool for tool in library.service.catalog(USER, scope=scope) if tool.source == "media-convert"}
@@ -122,7 +122,7 @@ def test_the_five_tools_register_from_the_manifest_for_the_library_and_the_histo
         assert all(tool.runnable for tool in listed.values())
     assert not [tool for tool in library.service.catalog(USER, scope="field") if tool.source == "media-convert"]
     for_videos = {tool.id for tool in library.service.catalog(USER, kind="video", scope="library") if tool.source == "media-convert"}
-    assert for_videos == {"media-convert.video", "media-convert.extract-audio", "media-convert.animation"}
+    assert for_videos == {"media-convert.video", "media-convert.extract-audio", "media-convert.animation", "media-convert.lighten"}
 
 
 def test_a_png_published_as_webp_keeps_its_name_with_the_new_extension(library, source_dir):
@@ -334,6 +334,19 @@ def test_a_video_becomes_an_animated_webp_item(library, source_dir):
     assert made.original_filename == "Holiday.webp" and made.mime_type == "image/webp"
     with Image.open(library.file(made)) as image:
         assert image.format == "WEBP" and image.n_frames > 1
+
+
+def test_a_lightened_video_is_a_new_mp4_item_under_its_target(library, source_dir):
+    need_encoders("libx264", "aac")
+    item = library.add(make_video(source_dir / "a.mkv", seconds=2.0, size=(64, 48)), "Holiday.mkv", "video")
+
+    result = library.run("media-convert.lighten", {"target": 8}, item)
+
+    assert result.ok, result.error
+    [made] = result.items
+    assert made.original_filename == "Holiday.mp4" and made.mime_type == "video/mp4"
+    assert library.file(made).stat().st_size < 8 * 1000 * 1000
+    assert library.thumbnails(made)
 
 
 def plugin_constants(library):
