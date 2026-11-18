@@ -10,7 +10,7 @@ from src.plugin_api.media_tools import ToolCancelled, ToolContext, ToolFailed
 from tools import common, lighten
 from tools.lighten import LightenVideo, Plan, frame_cap, frames_to_encode, impossible, pass_log_bytes, plan, smallest_mb
 
-from .conftest import make_video, need_encoders, params_for, piped, probe, run_ffmpeg, streams_of
+from .conftest import lying_rate, make_video, need_encoders, params_for, piped, probe, run_ffmpeg, streams_of
 
 TOOL = "media-convert.lighten"
 UNIT = 20_000
@@ -484,7 +484,7 @@ def test_the_first_pass_is_bounded_by_the_frames_the_file_really_holds(ctx, sour
 
 def test_without_a_frame_count_the_bound_follows_the_stated_rate(ctx, source_dir, monkeypatch):
     path = sound_longer_than_picture(source_dir)
-    monkeypatch.setattr(lighten, "count_frames", lambda path, index: None)
+    monkeypatch.setattr(lighten, "count_frames", lambda *args: None)
     streams = common.read_streams(path)
 
     assert frames_to_encode(ctx.probe(path, "video"), streams, 2.0) == frame_cap(2.0, 25.0)
@@ -492,7 +492,7 @@ def test_without_a_frame_count_the_bound_follows_the_stated_rate(ctx, source_dir
 
 def test_a_first_pass_that_reaches_its_bound_is_refused_before_the_second(ctx, source_dir, small_unit, monkeypatch, no_grants):
     path = busy_video(source_dir / "busy.mp4")
-    monkeypatch.setattr(lighten, "count_frames", lambda path, index: 10)
+    monkeypatch.setattr(lighten, "count_frames", lambda *args: 10)
 
     with pytest.raises(ToolFailed, match="^This video does not hold what its file states"):
         lightened(ctx, path, target=16)
@@ -501,23 +501,6 @@ def test_a_first_pass_that_reaches_its_bound_is_refused_before_the_second(ctx, s
     assert first[first.index("-frames:v") + 1] == "13"
     assert list(ctx.scratch_dir.iterdir()) == []
     assert not no_grants
-
-
-def lying_rate(folder):
-    honest = folder / "honest.mkv"
-    run_ffmpeg(
-        "-f", "lavfi", "-i", "testsrc2=size=320x240:rate=50:duration=3",
-        "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", honest,
-    )
-    data = bytearray(honest.read_bytes())
-    needle = bytes([0x23, 0xE3, 0x83, 0x84]) + (20_000_000).to_bytes(4, "big")
-    at = data.find(needle)
-    if at < 0:
-        pytest.skip("this ffmpeg writes no four-byte DefaultDuration")
-    data[at + 4:at + 8] = (1_000_000_000).to_bytes(4, "big")
-    path = folder / "liar.mkv"
-    path.write_bytes(bytes(data))
-    return path
 
 
 def test_a_file_that_states_too_low_a_frame_rate_is_lightened_within_its_room(ctx, source_dir, monkeypatch):
@@ -546,6 +529,66 @@ def test_a_file_that_states_too_low_a_frame_rate_is_lightened_within_its_room(ct
     assert scratch == pass_log_bytes(-(-150 * 102 // 100) + 2, 320, 240)
     assert common.count_frames(result.path, 0) == 150
     assert sorted(item.name for item in ctx.scratch_dir.iterdir()) == [result.path.name]
+
+
+def test_a_result_shorter_than_its_source_is_refused_with_the_cause(ctx, source_dir, small_unit, monkeypatch, no_grants):
+    path = busy_video(source_dir / "busy.mp4")
+    real = lighten.read_streams
+
+    def shorter(found):
+        streams = real(found)
+        if Path(found).parent == ctx.scratch_dir:
+            picture = replace(streams.video, duration=1.0)
+            return common.Streams(streams=(picture, *streams.audio), tags=streams.tags, duration=1.0)
+        return streams
+
+    monkeypatch.setattr(lighten, "read_streams", shorter)
+
+    with pytest.raises(ToolFailed, match="^This video does not hold what its file states"):
+        lightened(ctx, path, target=16)
+
+    assert len(ctx.commands) == 2
+    assert list(ctx.scratch_dir.iterdir()) == []
+    assert not no_grants
+
+
+def test_the_frames_are_counted_only_once_the_quota_and_the_disk_allow_the_size(ctx, source_dir, small_unit, monkeypatch):
+    path = busy_video(source_dir / "busy.mp4")
+    counted = []
+    monkeypatch.setattr(lighten, "count_frames", lambda *args: counted.append(args) or 100)
+    quota(monkeypatch, ctx, storage=10 * UNIT)
+
+    with pytest.raises(ToolFailed, match="what is left of your storage"):
+        lightened(ctx, path, target=16)
+    assert counted == [] and ctx.commands == []
+
+    quota(monkeypatch, ctx)
+    monkeypatch.setattr(common.shutil, "disk_usage", lambda folder: SimpleNamespace(free=common.DISK_RESERVE + 10 * UNIT))
+    with pytest.raises(ToolFailed, match="^The server cannot take this conversion now"):
+        lightened(ctx, path, target=16)
+    assert counted == [] and ctx.commands == []
+
+
+def test_cancelling_while_the_frames_are_counted_stops_the_run(tmp_path, source_dir, small_unit, monkeypatch, no_grants):
+    need_encoders("libx264", "aac")
+    path = busy_video(source_dir / "busy.mp4")
+    stop = []
+    ctx = ToolContext(tmp_path / "scratch", is_cancelled=lambda: bool(stop))
+    media = ctx.probe(path, "video")
+    seen = []
+
+    def stopped(found, index, is_cancelled=None):
+        stop.append(1)
+        seen.append(is_cancelled())
+        raise ToolCancelled()
+
+    monkeypatch.setattr(lighten, "count_frames", stopped)
+
+    with pytest.raises(ToolCancelled):
+        LightenVideo().run([media], params_for(TOOL, target=16), ctx)
+    assert seen == [True]
+    assert ctx.commands == []
+    assert not no_grants
 
 
 def test_surround_sound_is_mixed_down_to_stereo(ctx, source_dir, small_unit):

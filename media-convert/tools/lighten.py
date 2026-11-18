@@ -22,6 +22,7 @@ from .common import (
     read_streams,
     refuse,
     release,
+    rooms,
     scratch_bytes,
     thread_args,
 )
@@ -137,8 +138,8 @@ def frame_cap(seconds: float, rate: float) -> int:
     return math.ceil(min(seconds, max_seconds() + 1) * rate * FRAME_SLACK) + 2
 
 
-def frames_to_encode(media, streams, seconds: float) -> int:
-    counted = count_frames(media.path, streams.video.index)
+def frames_to_encode(media, streams, seconds: float, is_cancelled=None) -> int:
+    counted = count_frames(media.path, streams.video.index, is_cancelled)
     if counted:
         return math.ceil(counted * FRAME_SLACK) + 2
     return frame_cap(seconds, streams.video.rate or media.fps or CAP_FALLBACK_RATE)
@@ -175,12 +176,19 @@ def quota_refusal(room) -> ToolFailed:
     )
 
 
-def lighten_room(ctx, cap: int, needed: int, scratch: int, result: int):
+def check_room(ctx, result: int) -> None:
     folder = Path(ctx.scratch_dir)
     folder.mkdir(parents=True, exist_ok=True)
     for room in quota_rooms(ctx, scratch_bytes(folder)):
         if room.size < result:
             raise quota_refusal(room)
+    for room in rooms(ctx, result, quota=[]):
+        if room.reason in ("run", "disk") and room.size < result:
+            refuse(room, result)
+
+
+def lighten_room(ctx, cap: int, needed: int, scratch: int, result: int):
+    check_room(ctx, result)
     return make_room(ctx, cap, needed=needed, scratch=scratch)
 
 
@@ -268,10 +276,12 @@ class LightenVideo(MediaTool):
 
     def encode(self, media, streams, track, keep, target, seconds, duration, ctx):
         chosen = plan(media, streams, track, target, seconds, duration)
-        frames = frames_to_encode(media, streams, seconds)
+        check_room(ctx, target)
+        frames = frames_to_encode(media, streams, seconds, ctx.is_cancelled)
+        guard(ctx)
         logs = pass_log_bytes(frames, chosen.width, chosen.height)
         prefix = ctx.new_path("", stem="pass")
-        room = lighten_room(ctx, target + logs, needed=target + logs, scratch=logs, result=target)
+        room = make_room(ctx, target + logs, needed=target + logs, scratch=logs)
         outputs = []
         try:
             self.first_pass(media, streams, chosen, prefix, frames, ctx.scoped(0.0, 0.4))
