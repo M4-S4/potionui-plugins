@@ -158,6 +158,9 @@ class Endless:
     def kill(self):
         self.killed = True
 
+    def poll(self):
+        return -9 if self.killed else None
+
 
 def test_counting_frames_stops_ffprobe_when_the_run_is_cancelled(tmp_path, monkeypatch):
     made = []
@@ -176,4 +179,17 @@ def test_counting_frames_gives_up_after_its_time(tmp_path, monkeypatch):
     monkeypatch.setattr(common, "COUNT_TIMEOUT_SECONDS", 0.0)
 
     assert count_frames(tmp_path / "clip.mp4", 0, lambda: False) is None
+    assert made[0].killed
+
+
+def test_counting_frames_stops_ffprobe_when_the_cancel_check_fails(tmp_path, monkeypatch):
+    made = []
+    monkeypatch.setattr(common.subprocess, "Popen", lambda *args, **kwargs: made.append(Endless()) or made[-1])
+
+    def broken():
+        raise RuntimeError("progress lost")
+
+    with pytest.raises(RuntimeError):
+        count_frames(tmp_path / "clip.mp4", 0, broken)
+
     assert made[0].killed

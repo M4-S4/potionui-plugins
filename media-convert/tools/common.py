@@ -455,18 +455,20 @@ def count_frames(path: Path, index: int, is_cancelled=None) -> Optional[int]:
     except OSError:
         return None
     deadline = time.monotonic() + COUNT_TIMEOUT_SECONDS
-    while True:
-        try:
-            output, _ = process.communicate(timeout=COUNT_POLL_SECONDS)
-            break
-        except subprocess.TimeoutExpired:
-            cancelled = bool(is_cancelled and is_cancelled())
-            if cancelled or time.monotonic() >= deadline:
-                process.kill()
-                process.communicate()
-                if cancelled:
+    try:
+        while True:
+            try:
+                output, _ = process.communicate(timeout=COUNT_POLL_SECONDS)
+                break
+            except subprocess.TimeoutExpired:
+                if is_cancelled and is_cancelled():
                     raise ToolCancelled()
-                return None
+                if time.monotonic() >= deadline:
+                    return None
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.communicate()
     found = whole((output or "").strip().split(",")[0]) if process.returncode == 0 else 0
     return found or None
 
