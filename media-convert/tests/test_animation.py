@@ -39,6 +39,10 @@ def test_each_format_loops_forever_with_the_frames_of_the_chosen_length(ctx, sou
     assert result.path.parent == ctx.scratch_dir
     found, size, frames, loop, total = frames_of(result.path)
     assert (found, size, loop) == (kind, (320, 240), 0)
+    if fmt == "gif":
+        assert result.has_alpha is False
+        with Image.open(result.path) as image:
+            assert "transparency" not in image.info
     assert abs(frames - 32) <= 1
     assert total == pytest.approx(2000, abs=130)
 

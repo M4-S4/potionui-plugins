@@ -143,7 +143,7 @@ class MakeAnimation(MediaTool):
         ctx.scoped(0.0, 0.4).ffmpeg(
             [
                 *source, "-map", f"0:{index}", "-an", "-sn", "-dn",
-                "-vf", f"{picture_filter},palettegen=max_colors={colours}:stats_mode=diff",
+                "-vf", f"{picture_filter},palettegen=max_colors={colours}:stats_mode=diff:reserve_transparent=0",
                 "-frames:v", "1", "-fs", str(PALETTE_ROOM), str(palette),
             ],
             duration=length,
