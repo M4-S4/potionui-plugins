@@ -188,6 +188,9 @@ class LightenVideo(MediaTool):
         if written >= target:
             out.unlink(missing_ok=True)
             return None
+        if written >= room.size:
+            out.unlink(missing_ok=True)
+            refuse(room, written)
         return ctx.probe(out, "video")
 
     def encode(self, media, streams, track, keep, target, duration, ctx):

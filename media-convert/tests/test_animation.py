@@ -253,3 +253,11 @@ def test_a_video_without_picture_is_refused(ctx, source_dir, monkeypatch):
 
     with pytest.raises(ToolFailed, match="^This video has no picture to make an animation from$"):
         MakeAnimation().run([media], params_for(TOOL), ctx)
+
+
+def test_a_part_that_gives_no_file_is_refused(ctx, source_dir, monkeypatch):
+    path = make_video(source_dir / "clip.mp4", seconds=1.0, size=(64, 48))
+    monkeypatch.setattr(MakeAnimation, "webp", lambda self, ctx, *args: args[-2].size)
+
+    with pytest.raises(ToolFailed, match="^This part of the video has no picture: choose another start$"):
+        animate(ctx, path, format="webp")

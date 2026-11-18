@@ -1,3 +1,4 @@
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -220,6 +221,24 @@ def test_an_h264_mp4_already_under_the_target_is_copied_without_encoding(ctx, so
     assert "-pass" not in command
     assert [s["codec_name"] for s in probe(result.path)["streams"]] == ["h264", "aac"]
     assert "location" not in (probe(result.path)["format"].get("tags") or {})
+
+
+def test_a_copy_cut_by_its_room_is_refused_and_not_published(ctx, source_dir, monkeypatch, no_grants):
+    path = make_video(source_dir / "clip.mp4", seconds=2.0, size=(64, 48))
+    real = lighten.make_room
+
+    def tight(ctx, cap, needed=0, unstoppable=0):
+        room = real(ctx, cap, needed, unstoppable)
+        return replace(room, size=needed // 2)
+
+    monkeypatch.setattr(lighten, "make_room", tight)
+
+    with pytest.raises(ToolFailed, match="the most Media Converter writes for this file"):
+        lightened(ctx, path, target=8)
+    [command] = ctx.commands
+    assert command[command.index("-c") + 1] == "copy"
+    assert list(ctx.scratch_dir.iterdir()) == []
+    assert not no_grants
 
 
 def test_a_copy_keeps_the_place_only_when_asked(ctx, source_dir):

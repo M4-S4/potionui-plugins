@@ -50,7 +50,7 @@ The tool window always saves a new item and never offers to replace the original
 
 Pick the format, where the animation starts in the video, how long it lasts (10 seconds by default, from half a second to 30), its largest side (640, 480 or 320 px, never larger than the video), its frame rate and its quality. The result is an image item, `Clip.gif` or `Clip.webp`, that loops forever.
 
-- A GIF plays everywhere. An animated WebP plays in current browsers and weighed two to three times less in our tests, and nine times less on grainy footage.
+- A GIF plays everywhere. An animated WebP plays in current browsers and weighed two to three times less in our tests, and six to ten times less on grainy footage.
 - The frame rate is the video's own, divided by the smallest whole number that brings it to 25 per second or less, and the other two steps keep every second or every third frame of that: a 16 fps clip gives 16, 8 or about 5 frames per second, a 30 fps clip 15, 7.5 or 5. The motion stays even.
 - A GIF of 15 seconds at 480 px and 24 frames per second weighed about 5 MB in our tests; the same in WebP about 2 MB.
 - When the end of the clip and its start do not match, the loop jumps where it starts again: pick a start and a length that close the loop.

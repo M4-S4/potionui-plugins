@@ -128,11 +128,12 @@ class MakeAnimation(MediaTool):
             else:
                 limit = self.webp(ctx, source, picture.index, picture_filter, level, length, room, out)
             guard(ctx)
-            if out.stat().st_size >= limit:
-                refuse(room, out.stat().st_size)
+            written = out.stat().st_size if out.is_file() else 0
+            if written >= limit:
+                refuse(room, written)
         finally:
             release(room)
-        if frames_in(out) < 1:
+        if not written or frames_in(out) < 1:
             raise ToolFailed("This part of the video has no picture: choose another start")
         return ctx.probe(out, "image")
 
