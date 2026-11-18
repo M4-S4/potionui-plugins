@@ -26,7 +26,7 @@ settings:
   - name: "max_minutes"
     type: "number"
     label: "Longest video or sound, in minutes"
-    description: "Longer files are refused with a message. PotionUI stops any conversion after 30 minutes of work, so 30 is the most this can be."
+    description: "Longer files are refused with a message, from 1 to 30 minutes."
     default: 30
     min: 1
     max: 30

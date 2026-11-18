@@ -38,7 +38,7 @@ The plugin has no page of its own: each tool opens the usual tool window of Poti
 
 The result is a new item in the Library, next to the original, which stays as it was. It keeps the name of the original with the extension of the new format: `Cat.png` converted to WebP becomes `Cat.webp`. A file of a generation keeps the name it has in the History. Select several items and run a tool once to convert them all in one run; if one of them is refused, the whole run fails and none of them is saved. Two sources with the same name, such as `Cat.png` and `Cat.webp` converted to JPEG, give two items both named `Cat.jpg`.
 
-The tool window always saves a new item and never offers to replace the original. A request from the chat, the automation or the API can still ask to replace an image, a video or a sound by its conversion. Depending on the version of PotionUI, the replaced item then either keeps its old name and extension over the new content (`Cat.png` holding a WebP picture, on PotionUI 0.2.0), which a download or a zip export of the Library carries along, or takes the extension of its new format.
+The tool window always saves a new item and never offers to replace the original. A request from the chat, the automation or the API can still ask to replace an image, a video or a sound by its conversion. The replaced item can then keep its old name and extension over the new content, such as `Cat.png` holding a WebP picture, and a download or a zip export of the Library carries that name along.
 
 ![The Convert video window on a 1280 × 720 clip: format WebM (VP9), quality Balanced, original size, Keep metadata on](https://raw.githubusercontent.com/M4-S4/potionui-plugins/main/media-convert/docs/screenshots/convert-video-dark.webp)
 
@@ -85,7 +85,7 @@ Every setting, the encoder behind each quality step, what each conversion keeps 
 - Images up to 67 million pixels (8192 × 8192), videos up to about 9.4 million pixels (4096 × 2304, which covers 4K): larger ones are refused.
 - A video comes out in 8-bit colour. An HDR video, such as one filmed by a recent phone, keeps its HDR colour labels over 8-bit pictures, without tone mapping: depending on the player it can show colour bands, or look washed out in a player that ignores the labels.
 - A result that would be too large for one conversion (4 GB at most), one run (8 GB), the user's storage or the disk is refused. Media Converter keeps 2 GB free on the disk where PotionUI keeps its working files: a safeguard, not a guarantee that the disk never fills.
-- A run from chat is cancelled after ten minutes and an automation node waits five minutes by default, so convert long videos from the Library.
+- Start long video conversions from the Library: the chat and the automation may stop waiting for a long conversion before it ends.
 - Not in this version: an animation made back into a video, Lighten for images, replacing the original from the tool window, AV1, AVIF, HEIC, JPEG XL, copying a stream without encoding it again outside Lighten for sending, cover art of a sound file, and the tool in the media field of a generation form. The [reference](docs/reference.md#not-in-this-version) has the full list.
 
 ## Changes
@@ -98,7 +98,7 @@ Every setting, the encoder behind each quality step, what each conversion keeps 
 
 ### What changed in 0.1.1
 
-- **The disk reserve counts the conversions still running.** Media Converter keeps 2 GB free on the disk where PotionUI keeps its working files. In 0.1.0 each conversion got half of the space that was free above these 2 GB when it started, so conversions that overlapped could together take more than that. In 0.1.1 the room given to every conversion still running, less what it has already written, is taken out of the free space before a new conversion gets its share. The reserve covers the conversions of Media Converter only, counted in the PotionUI process that runs them; a video or sound conversion can still write past its room before ffmpeg stops, by about one encoded frame and the end of the file.
+- **The disk reserve counts the conversions still running.** Media Converter keeps 2 GB free on the disk where PotionUI keeps its working files. In 0.1.0 each conversion got half of the space that was free above these 2 GB when it started, so conversions that overlapped could together take more than that. In 0.1.1 the room given to every conversion still running, less what it has already written, is taken out of the free space before a new conversion gets its share. The reserve covers the conversions of Media Converter only; a video or sound conversion can still write past its room before ffmpeg stops, by about one encoded frame and the end of the file.
 - **A JPEG at High quality from a very detailed image.** Such an image could fail with a general error in 0.1.0. It is now written a second time without Huffman optimisation, which gives a slightly larger file of the same quality.
 - **The server log on a lack of disk space.** When Media Converter refuses a conversion for lack of disk space, the server log also gives the room promised to the conversions still running.
 
