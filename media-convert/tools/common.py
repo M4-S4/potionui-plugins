@@ -315,6 +315,9 @@ class Stream:
     sample_rate: int = 0
     attached: bool = False
     tags: dict = field(default_factory=dict)
+    pix_fmt: str = ""
+    bit_rate: int = 0
+    rate: Optional[float] = None
 
 
 @dataclass(frozen=True)
@@ -338,6 +341,26 @@ class Streams:
     @property
     def other_subtitles(self) -> list:
         return [s for s in self.streams if s.kind == "subtitle" and s.codec not in TEXT_SUBTITLES]
+
+
+def whole(value) -> int:
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return 0
+
+
+def frame_rate(value) -> Optional[float]:
+    text = str(value or "")
+    try:
+        if "/" in text:
+            top, bottom = text.split("/", 1)
+            rate = float(top) / float(bottom) if float(bottom) else 0.0
+        else:
+            rate = float(text) if text else 0.0
+    except ValueError:
+        return None
+    return rate if math.isfinite(rate) and rate > 0 else None
 
 
 def ffprobe_binary() -> str:
@@ -376,6 +399,9 @@ def read_streams(path: Path) -> Streams:
             sample_rate=int(item.get("sample_rate") or 0),
             attached=bool((item.get("disposition") or {}).get("attached_pic")),
             tags=dict(item.get("tags") or {}),
+            pix_fmt=str(item.get("pix_fmt") or ""),
+            bit_rate=whole(item.get("bit_rate")),
+            rate=frame_rate(item.get("avg_frame_rate")) or frame_rate(item.get("r_frame_rate")),
         )
         for item in payload.get("streams") or []
     )
