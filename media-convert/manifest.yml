@@ -262,9 +262,9 @@ media_tools:
         type: select
         label: "Frame rate"
         default: full
-        description: "Fewer frames make a lighter file. Each step keeps every second or third frame, so the motion stays even."
+        description: "Up to 25 per second keeps the video's rate, or a whole fraction of it that is 25 or less: 30 gives 15. Half and A third keep every second or third frame of that, so the motion stays even and the file is lighter."
         options:
-          - { label: "Like the video, 25 per second at most", value: full }
+          - { label: "Up to 25 per second", value: full }
           - { label: "Half", value: half }
           - { label: "A third", value: third }
       - name: quality

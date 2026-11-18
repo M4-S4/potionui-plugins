@@ -1,6 +1,6 @@
 # Media Converter
 
-Media Converter adds six tools to the **Tools** menu of the Library and of the History in PotionUI, for every user: convert an image, a video or a sound to another format, extract the sound of a video, make a looping GIF or animated WebP from a video, and lighten a video under a size you choose before you send it. Install it from this catalogue:
+Media Converter adds six tools to the **Edit** menu of the items of the Library and of the History in PotionUI, for every user: convert an image, a video or a sound to another format, extract the sound of a video, make a looping GIF or animated WebP from a video, and lighten a video under a size you choose before you send it. Install it from this catalogue:
 ```text
 https://raw.githubusercontent.com/M4-S4/potionui-plugins/main/plugins.json
 ```
@@ -9,7 +9,7 @@ Version 0.2.0. It needs PotionUI 0.2.0 or later.
 
 1. In **Admin › Plugins**, click **Install from catalog**, paste the catalogue URL and click **Read catalog**.
 2. Click **Install** next to **Media Converter**, then **Install** in the window that asks to confirm. It arrives in the list, disabled.
-3. Turn it on with its switch. Its tools appear in the Tools menus at once.
+3. Turn it on with its switch. Its tools appear under **Edit** at once.
 
 Updating from 0.1.0 or 0.1.1 to 0.2.0 needs its own order: disable Media Converter in **Admin › Plugins**, restart PotionUI, update it from the catalogue, then enable it. Tried in another order, the tools of the new version may not load: the update or the enabling ends with an error, and Media Converter stays on its old version or without its tools. If that happens, start again from the first step, and skip the update step if the catalogue already shows 0.2.0 installed.
 
@@ -23,7 +23,7 @@ In **Admin › Plugins › Media Converter › Settings**, an admin sets the num
 
 ## Using it
 
-The tools sit under **Edit**, where the menu names them with "Media Convert" below each tool:
+The tools sit under **Edit**: right-click an item, or open it and click **Edit**; for several selected items, click **Tools**, then **Edit**. The menu names them with "Media Convert" below each tool:
 
 | Tool | Takes | Makes |
 |---|---|---|
@@ -40,7 +40,7 @@ The result is a new item in the Library, next to the original, which stays as it
 
 The tool window always saves a new item and never offers to replace the original. A request from the chat, the automation or the API can still ask to replace an image, a video or a sound by its conversion. The replaced item can then keep its old name and extension over the new content, such as `Cat.png` holding a WebP picture, and a download or a zip export of the Library carries that name along.
 
-![The Convert video window on a 1280 × 720 clip: format WebM (VP9), quality Balanced, original size, Keep metadata on](https://raw.githubusercontent.com/M4-S4/potionui-plugins/main/media-convert/docs/screenshots/convert-video-dark.webp)
+![The Convert video window on a 1920 × 1080 clip of 20 seconds: format MP4 (H.264) among MP4 (H.264), MOV (H.264), WebM (VP9) and MP4 (H.265), with the note that MP4 (H.265) works only when an admin allows it, which is off on this server; quality Balanced, original size, Keep metadata on](https://raw.githubusercontent.com/M4-S4/potionui-plugins/main/media-convert/docs/screenshots/convert-video-dark.webp)
 
 ![The Library after the conversion: Test clip.webm, marked new, next to Test clip.mp4, which stays as it was](https://raw.githubusercontent.com/M4-S4/potionui-plugins/main/media-convert/docs/screenshots/result-dark.webp)
 
@@ -50,7 +50,7 @@ The tool window always saves a new item and never offers to replace the original
 
 Pick the format, where the animation starts in the video, how long it lasts (10 seconds by default, from half a second to 30), its largest side (640, 480 or 320 px, never larger than the video), its frame rate and its quality. The result is an image item, `Clip.gif` or `Clip.webp`, that loops forever.
 
-![The Make an animation window on a 1920 × 1080 clip of 20 seconds: GIF, start 0, length 10 seconds, 480 px, frame rate Like the video, quality Balanced](https://raw.githubusercontent.com/M4-S4/potionui-plugins/main/media-convert/docs/screenshots/make-animation-dark.webp)
+![The Make an animation window on a 1920 × 1080 clip of 20 seconds: GIF, start 0, length 10 seconds, 480 px, frame rate Up to 25 per second, quality Balanced](https://raw.githubusercontent.com/M4-S4/potionui-plugins/main/media-convert/docs/screenshots/make-animation-dark.webp)
 
 - A GIF plays everywhere but grows fast with grain and movement: in our tests, 16 seconds of grainy footage at 640 px made a GIF of 47 MB, and 15 seconds at 320 px and Half one of 5 MB. An animated WebP plays in current browsers and weighed 2 to 16 times less than the GIF in our tests, the most on grainy footage. For a light GIF, pick 320 px, Half or A third.
 - The frame rate is the video's own, divided by the smallest whole number that brings it to 25 per second or less, and the other two steps keep every second or every third frame of that: a 16 fps clip gives 16, 8 or about 5 frames per second, a 30 fps clip 15, 7.5 or 5. The motion stays even.
@@ -76,7 +76,7 @@ MP4 (H.265) stays in the format list of Convert video even while an admin has no
 
 - The file is tagged `hvc1`, which Apple devices need to play it. Whether an H.265 video plays depends on the browser and the device: some browsers and systems play it only with hardware that decodes H.265 or an extra codec, so the item may not play in the Library on every computer.
 - H.265 makes lighter files than H.264 at a similar quality, but it took two to five times as long to encode in our tests. The thread setting bounds the thread pool of the H.265 encoder like the other encoders.
-- Before it encodes a video that may take long, Media Converter times the encoding of three short parts of it, at a quarter, half and three quarters of its length, and refuses the video if the whole would take more than about 18 minutes at the pace of the slowest part, with "MP4 (H.265) would take about N minutes to encode this video on this server, more than a conversion may take; choose a smaller Largest side, MP4 (H.264), or a shorter video". It is an estimate: a video much heavier elsewhere than in these three parts can still take longer.
+- Before it encodes a video that may take long, Media Converter times the encoding of three short parts of it, at the start, half and three quarters of its length, and refuses the video if the whole would take more than about 18 minutes at the pace of the slowest part, with "MP4 (H.265) would take about N minutes to encode this video on this server, more than a conversion may take; choose a smaller Largest side, MP4 (H.264), or a shorter video". It is an estimate: a video much heavier elsewhere than in these three parts can still take longer.
 - H.265 is covered by patents that are licensed through patent pools. Check whether they concern your use before you allow it.
 
 Every setting, the encoder behind each quality step, what each conversion keeps and loses, every refusal with its message and the load on the server are in the [reference](docs/reference.md), which PotionUI also shows in **Admin › Documentation** as "Media Converter: reference".
@@ -106,7 +106,7 @@ Every setting, the encoder behind each quality step, what each conversion keeps 
 
 ### What changed in 0.1.0
 
-- **First version.** Four tools in the Tools menu of the Library and the History: Convert image saves an image as PNG, JPEG or WebP; Convert video saves a video as MP4 or MOV in H.264, or as WebM in VP9; Convert sound saves a sound as WAV, MP3, FLAC, M4A (AAC) or OGG (Opus); Extract sound saves the sound of a video in the same five formats.
+- **First version.** Four tools in the Edit menu of the Library and the History: Convert image saves an image as PNG, JPEG or WebP; Convert video saves a video as MP4 or MOV in H.264, or as WebM in VP9; Convert sound saves a sound as WAV, MP3, FLAC, M4A (AAC) or OGG (Opus); Extract sound saves the sound of a video in the same five formats.
 - **Settings of each tool.** Three quality steps (High, Balanced, Small) for the lossy formats and a Keep metadata switch; Convert image and Convert video can also make the result smaller, with a largest side from 3840 px down to 640 px.
 - **Admin settings.** The number of ffmpeg threads per conversion, and the longest video or sound a user may convert, 30 minutes at most.
 - **Bounds.** Images over 67 million pixels and videos over about 9.4 million pixels (4096 × 2304) are refused. One conversion writes at most 4 GB and one run at most 8 GB. Media Converter refuses to convert when less than 2 GB are free on the disk where PotionUI keeps its working files.
