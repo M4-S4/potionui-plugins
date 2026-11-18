@@ -468,8 +468,13 @@ function normalizeShotEstimate(value) {
 		seconds: number(value.seconds),
 		resolution: text(value.resolution) || null,
 		fps: number(value.fps),
-		video: normalizeShotVideo(value.video)
+		video: normalizeShotVideo(value.video),
+		frame: normalizeFrame(value.frame)
 	};
+}
+
+function normalizeFrame(value) {
+	return Array.isArray(value) && value.length === 2 && value.every((side) => Number.isInteger(side) && side > 0) ? [value[0], value[1]] : null;
 }
 
 function normalizeShotVideo(value) {

@@ -34,13 +34,19 @@ export function framed(size, doc) {
 
 export const fitClass = (mode) => (mode === BARS ? 'object-contain' : 'object-cover');
 
-export function frameBox(doc, tall = '7rem') {
-	const ratio = filmRatio(doc);
+export function takeFrame(doc, made = null, image = null) {
+	const film = filmRatio(doc);
+	if (!(made > 0) || fit(made, film) === EXACT) return film;
+	const size = sizeOf(image);
+	const own = size ? size[0] / size[1] : null;
+	return own && fit(own, made) === EXACT ? own : made;
+}
+
+export function frameBox(doc, tall = '7rem', ratio = filmRatio(doc)) {
 	return ratio >= 1 ? `aspect-ratio: ${ratio}; width: 100%` : `aspect-ratio: ${ratio}; height: ${tall}; width: auto; max-width: 100%; margin: 0 auto`;
 }
 
-export function frameTile(doc, width = 88, height = 50) {
-	const ratio = filmRatio(doc);
+export function frameTile(doc, width = 88, height = 50, ratio = filmRatio(doc)) {
 	return ratio >= width / height ? `aspect-ratio: ${ratio}; width: ${width}px` : `aspect-ratio: ${ratio}; height: ${height}px`;
 }
 

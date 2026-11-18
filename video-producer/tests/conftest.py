@@ -1,6 +1,5 @@
 import importlib
 import sys
-import time
 from pathlib import Path
 
 import pytest
@@ -866,14 +865,15 @@ class FakeCore:
     def spent(self):
         return sum(units for _, kind, units, ref in self.recorded if kind == "video-producer.gpu_minutes" and ref not in self.refunded)
 
-    def meter(self, remaining, pause=0.0):
-        self.metered = (self.spent() + remaining, pause)
+    def meter(self, remaining, hold=None):
+        self.metered = (self.spent() + remaining, hold)
 
     def limit_status(self, user_id, kind):
         if kind == "video-producer.gpu_minutes" and self.metered is not None:
-            limit, pause = self.metered
+            limit, hold = self.metered
             used = self.spent()
-            time.sleep(pause)
+            if hold is not None:
+                hold()
             return {"limit": limit, "used": used, "remaining": max(0.0, limit - used), "exempt": False, "resets_at": None}
         if kind == "video-producer.gpu_minutes":
             return dict(self.quota)

@@ -10,6 +10,7 @@
 	import { clipFilter } from '../../lib/look.js';
 	import { frameBox } from '../../lib/framing.js';
 	import { compareSeamHere, openSeam } from '../../lib/band.svelte.js';
+	import { thumbRatio } from '../../lib/production.svelte.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import SeamPanel from '../storyboard/SeamPanel.svelte';
 	import ColorControls from '../inspector/ColorControls.svelte';
@@ -20,12 +21,14 @@
 	let grading = $state(false);
 	const index = $derived(doc.clips.indexOf(clip));
 	const pick = $derived(seamPick(doc, index, takeStore.list));
-	const lastSrc = $derived(pick?.last?.src ?? seamImage(doc, previous.id, 'last')?.src ?? clipThumb(previous));
-	const firstSrc = $derived(clipThumb(clip) ?? pick?.first?.src ?? seamImage(doc, clip.id, 'first')?.src ?? null);
+	const lastImage = $derived(pick?.last?.src != null ? null : seamImage(doc, previous.id, 'last'));
+	const firstImage = $derived(clipThumb(clip) != null || pick?.first?.src != null ? null : seamImage(doc, clip.id, 'first'));
+	const lastSrc = $derived(pick?.last?.src ?? lastImage?.src ?? clipThumb(previous));
+	const firstSrc = $derived(clipThumb(clip) ?? pick?.first?.src ?? firstImage?.src ?? null);
 	const pair = $derived(identityTakes(clip));
 	const sides = $derived([
-		{ src: lastSrc, shot: previous, caption: `${t('storyboard.band.endOf', { n: shotNumber(previous) })} · ${clipLabel(previous)}` },
-		{ src: firstSrc, shot: clip, caption: `${t('storyboard.band.startOf', { n: shotNumber(clip) })} · ${clipLabel(clip)}` }
+		{ src: lastSrc, image: lastImage, shot: previous, caption: `${t('storyboard.band.endOf', { n: shotNumber(previous) })} · ${clipLabel(previous)}` },
+		{ src: firstSrc, image: firstImage, shot: clip, caption: `${t('storyboard.band.startOf', { n: shotNumber(clip) })} · ${clipLabel(clip)}` }
 	]);
 </script>
 
@@ -33,7 +36,7 @@
 	<div class="grid grid-cols-2 gap-1.5">
 		{#each sides as side (side.shot.id)}
 			<figure class="min-w-0 space-y-1">
-				<span class="block overflow-hidden rounded bg-surface-3" style={frameBox(doc)} data-seam-still>{#if side.src}<img src={side.src} alt="" class="h-full w-full object-cover" style:filter={clipFilter(side.shot)} />{/if}</span>
+				<span class="block overflow-hidden rounded bg-surface-3" style={frameBox(doc, '7rem', side.image ? thumbRatio(side.shot.id, side.image) : undefined)} data-seam-still>{#if side.src}<img src={side.src} alt="" class="h-full w-full object-cover" style:filter={clipFilter(side.shot)} />{/if}</span>
 				<figcaption class="line-clamp-2 text-2xs text-fg-subtle">{side.caption}</figcaption>
 			</figure>
 		{/each}

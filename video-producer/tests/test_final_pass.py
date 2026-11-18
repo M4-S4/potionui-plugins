@@ -454,12 +454,13 @@ def test_two_final_passes_that_each_fit_the_quota_cannot_both_reserve_it(core, m
     evaluations = [_pass(core, project, [draft]) for draft in drafts]
     assert [evaluation.payload["blocks"] for evaluation in evaluations] == [[], []]
     sound = generation.with_sound
+    met = {}
 
-    async def slow(*args):
-        await asyncio.sleep(0.01)
+    async def meet(*args):
+        await asyncio.wait_for(met.setdefault("barrier", asyncio.Barrier(len(evaluations))).wait(), 5)
         return await sound(*args)
 
-    monkeypatch.setattr(generation, "with_sound", slow)
+    monkeypatch.setattr(generation, "with_sound", meet)
     user = core.users["user-1"]
 
     async def together():

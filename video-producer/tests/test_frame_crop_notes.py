@@ -42,7 +42,7 @@ def test_a_crop_past_the_share_the_film_crops_before_bars_is_the_strong_warning_
     assert _crops(_plans(core, doc, presets.MINIMAX_H3_12GB)) == [
         {
             "code": LARGE,
-            "message": "The start image of the shot is 1024x1024, not 16:9: it is cropped at its centre and loses 42 % of the picture. Make a start image in the frame of the film instead.",
+            "message": "The start image of the shot is 1024x1024, not 16:9: it is cropped at its centre and loses 42 % of the picture. Make a start image in the frame of the take instead.",
             "data": {"shot_id": "s1", "roles": ["first"], "size": "1024x1024", "aspect": "16:9", "loss": 42, "chained": False},
         }
     ]
@@ -116,7 +116,7 @@ def test_a_shot_that_starts_from_the_last_image_of_an_imported_video_in_another_
 
     (warning,) = _crops(plans)
     assert warning["code"] == LARGE and warning["data"] == {"shot_id": "s2", "roles": ["first"], "size": "1080x1920", "aspect": "16:9", "loss": 68, "chained": True}
-    assert warning["message"].startswith("The last image of the previous shot is 1080x1920, not 16:9")
+    assert warning["message"] == "The last image of the previous shot is 1080x1920, not 16:9: it is cropped at its centre and loses 68 % of the picture. Make a start image in the frame of the take instead."
 
 
 def test_the_estimate_carries_the_warning_before_generate(core, make_doc, make_project, pictures):
@@ -137,7 +137,7 @@ def test_a_large_crop_of_an_end_image_asks_for_an_end_image(core, make_doc, pict
 
     (warning,) = _crops(_plans(core, doc, presets.MINIMAX_H3_12GB))
 
-    assert warning["data"]["roles"] == ["last"] and warning["message"].endswith("Make an end image in the frame of the film instead.")
+    assert warning["data"]["roles"] == ["last"] and warning["message"].endswith("Make an end image in the frame of the take instead.")
 
 
 def test_a_file_here_that_cannot_be_read_is_sent_as_it_is_and_gets_no_crop_warning(core, make_doc, pictures):

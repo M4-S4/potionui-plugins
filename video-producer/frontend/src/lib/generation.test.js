@@ -297,8 +297,8 @@ test('normalizeTake: the take row of the contract becomes camelCase with safe de
 test('normalizeEstimate and normalizeQueue: every block of the contract, null where the server says so', () => {
 	const est = normalizeEstimate({
 		shots: [
-			{ shot_id: 's1', director_mode: 'flf', seconds: 5, resolution: '832x480', fps: 16 },
-			{ shot_id: 's2', director_mode: 'flf', seconds: 3, resolution: '832x480', fps: 24, video: { tracks: [1, 'x', 0], rows: 16590, base_rows: 9180, scale: 2.06 } },
+			{ shot_id: 's1', director_mode: 'flf', seconds: 5, resolution: '832x480', fps: 16, frame: [26, 15] },
+			{ shot_id: 's2', director_mode: 'flf', seconds: 3, resolution: '832x480', fps: 24, video: { tracks: [1, 'x', 0], rows: 16590, base_rows: 9180, scale: 2.06 }, frame: [26, 0] },
 			{ bad: true }
 		],
 		vram: { estimate_gb: 21.4, free_gb: 18, total_gb: 24, streams: true, unknown: false, backend_id: 'native' },
@@ -309,8 +309,8 @@ test('normalizeEstimate and normalizeQueue: every block of the contract, null wh
 		warnings: [{ code: 'vram_stream', message: 'will stream through host RAM, slower' }, { code: 'fl2va_no_frame', message: 'x', data: { shot_id: 's1' } }]
 	});
 	assert.deepEqual(est.shots, [
-		{ shotId: 's1', directorMode: 'flf', seconds: 5, resolution: '832x480', fps: 16, video: null },
-		{ shotId: 's2', directorMode: 'flf', seconds: 3, resolution: '832x480', fps: 24, video: { tracks: [1], rows: 16590, baseRows: 9180, scale: 2.06 } }
+		{ shotId: 's1', directorMode: 'flf', seconds: 5, resolution: '832x480', fps: 16, video: null, frame: [26, 15] },
+		{ shotId: 's2', directorMode: 'flf', seconds: 3, resolution: '832x480', fps: 24, video: { tracks: [1], rows: 16590, baseRows: 9180, scale: 2.06 }, frame: null }
 	]);
 	assert.deepEqual(est.vram, { estimateGb: 21.4, freeGb: 18, totalGb: 24, streams: true, unknown: false, backendId: 'native' });
 	assert.deepEqual(est.time, { seconds: null, samples: 0 });

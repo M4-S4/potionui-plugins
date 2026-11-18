@@ -1,6 +1,24 @@
 # Video Producer: screenshots
 
-Fifteen images of the plugin alone, English interface: the three that the README shows, and twelve kept for the user guide. In this repository every image is stored as WebP (quality 85), converted from the JPEG and PNG captures that this page describes: sizes and crops are unchanged, and the formats given below are those of the captures.
+Twenty-four images of the plugin alone, English interface: the three that the README shows, the nine that the user guide shows, and twelve from earlier versions that no page shows. In this repository every image is stored as WebP (quality 85), converted from the JPEG and PNG captures that this page describes: sizes and crops are unchanged, and the formats given below are those of the captures.
+
+## User guide
+
+These nine images were taken on 18 November 2026 on a development instance of PotionUI that served the `dev` branch of the fork, with Video Producer at the same commit, in the dark theme, in a browser viewport of 1440 x 900 at a device scale of 1. The five full-window images are the whole viewport; the four others are crops of it around the window, drawer or popover they show, without reduction.
+
+The project is the starter project "Lumi’s potion", made by the plugin's own code for a test account and stored on the instance under a test name, then opened in the page. Nothing was generated: the project has no take, and the engine of the project was set to MiniMax H3 (12 GB) in the **Generation settings** drawer. One thing is staged: the browser wrote "Lumi’s potion" over the test name in the project bar and in the file name of the export window, just before each capture. The estimate is the instance's own, measured on 20 earlier takes of that preset.
+
+| Image | What it shows |
+|---|---|
+| [guide-storyboard-dark](guide-storyboard-dark.webp) | 1440 x 900. Storyboard, band view, shot 1 selected: the four shots to generate, the link chip of shot 2, the first image of shot 4, the marker "The magic", the quick edit of shot 1 beside the monitor, and the production deck ready to generate shot 1 on MiniMax H3 (12 GB) with its estimate. |
+| [guide-bible-dark](guide-bible-dark.webp) | 1440 x 900. Director AI, "Bible" view: the cards of Lumi and of the workshop, the grid of the cast shot by shot, and the card of Lumi open on the right. |
+| [guide-references-dark](guide-references-dark.webp) | 1440 x 900. Director AI, "References" view: the two project references, Lumi and the potion bottle, and on the right what the shot chosen in the Storyboard gets of them. |
+| [guide-breakdown-dark](guide-breakdown-dark.webp) | 1440 x 900. Storyboard, band view: the **Synopsis and breakdown** window opened under the band with D, on its **Breakdown** tab, with the synopsis of the starter project and the three methods. |
+| [guide-shot-editor-dark](guide-shot-editor-dark.webp) | 860 x 852. The shot editor of shot 4, "From violet to gold", opened with E: its prompt, its cast, its dialogue, its first and last frames, its drafts and its engine. |
+| [guide-settings-dark](guide-settings-dark.webp) | 440 x 307. The **Generation settings** drawer that the engine chip opens: MiniMax H3 (12 GB), the FL2VA profile, the draft and final sizes on **Auto** (832x480 and 1344x768) and two drafts per shot. The tooltip of the engine field shows over it. |
+| [guide-estimate-dark](guide-estimate-dark.webp) | 640 x 281. The **Estimate details** of shot 1 over the production deck: one shot, two takes in 832x480, the time measured on earlier takes of the preset, the memory, and two warnings: no linked frame, and the model streams through host RAM. |
+| [guide-mix-dark](guide-mix-dark.webp) | 1440 x 900. Mix: no sound in the project yet, and the console with the strip of the shots, the four empty audio tracks, the reverb and delay buses and the master. |
+| [guide-export-dark](guide-export-dark.webp) | 600 x 770. The **Export and share** window opened with Ctrl+E, on its **Video** tab: the warning that the four shots are not final yet, the format, the resolution, the sound options and the finishing, all off. Nothing was exported. |
 
 ## Starter project
 

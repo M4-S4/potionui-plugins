@@ -199,10 +199,10 @@ test('shortcuts: the key handler looks every key up in the table of the commands
 	ui.modal = null;
 });
 
-function tableOf(file) {
+function tableOf(file, from, to) {
 	const text = readFileSync(join(plugin, 'docs', file), 'utf-8').replace(/\r\n/g, '\n');
-	const start = text.indexOf('## 16.');
-	const section = text.slice(start, text.indexOf('## 17.'));
+	const start = text.indexOf(from);
+	const section = text.slice(start, text.indexOf(to, start));
 	const rows = section
 		.split('\n')
 		.filter((line) => line.startsWith('|') && !line.startsWith('|---') && !/^\| Shortcut \|/.test(line))
@@ -215,23 +215,27 @@ function names(locale) {
 	return { space: commandsJson['kbd.space'], backspace: commandsJson['kbd.backspace'] };
 }
 
-const GUIDE_FIXED = {
-	'user-guide.md': ['Esc', 'Delete', 'Left arrow', 'Right arrow', 'Home', 'End', 'Up arrow', 'Down arrow', 'Enter', '<', '>', 'Ctrl+Shift+Left arrow', 'Ctrl+Shift+Right arrow', 'Shift+R', 'Ctrl+click', 'Shift+click', 'Ctrl+Shift+click']
-};
+const DOC_FIXED = ['Esc', 'Delete', 'Left arrow', 'Right arrow', 'Home', 'End', 'Up arrow', 'Down arrow', 'Enter', '<', '>', 'Ctrl+Shift+Left arrow', 'Ctrl+Shift+Right arrow', 'Shift+R', 'Ctrl+click', 'Shift+click', 'Ctrl+Shift+click'];
+const shownOf = (rows) => rows.flatMap(([keys]) => keys.split(/,\s+/)).map((label) => label.replace(/\s*\(.*\)$/, ''));
+const expectedOf = (locale) => specs.map((spec) => formatShortcut(spec, { mac: false, names: names(locale) }));
 
-for (const [file, locale] of [['user-guide.md', 'en']]) {
-	test(`shortcuts: the table of ${file} lists exactly the shortcuts that work`, () => {
-		const { rows } = tableOf(file);
-		const shown = rows.flatMap(([keys]) => keys.split(/,\s+/)).map((label) => label.replace(/\s*\(.*\)$/, ''));
-		const expected = specs.map((spec) => formatShortcut(spec, { mac: false, names: names(locale) }));
-		for (const label of expected) assert.ok(shown.includes(label), `${label} is missing from ${file}`);
-		const known = new Set([...expected, ...GUIDE_FIXED[file], ...Array.from('ABRIOMNFU')]);
-		for (const label of shown) assert.ok(known.has(label), `${label} in ${file} is not a working shortcut`);
-	});
-}
+test('shortcuts: the table of user-reference.md lists exactly the shortcuts that work', () => {
+	const { rows } = tableOf('user-reference.md', '## 16.', '## 17.');
+	const shown = shownOf(rows);
+	const expected = expectedOf('en');
+	for (const label of expected) assert.ok(shown.includes(label), `${label} is missing from user-reference.md`);
+	const known = new Set([...expected, ...DOC_FIXED, ...Array.from('ABRIOMNFU')]);
+	for (const label of shown) assert.ok(known.has(label), `${label} in user-reference.md is not a working shortcut`);
+});
 
-test('shortcuts: the guide has its section heading and no shortcut that does not exist', () => {
-	const { heading, section } = tableOf('user-guide.md');
+test('shortcuts: the reference has its section heading, and the short table of the guide holds only working shortcuts', () => {
+	const { heading, section } = tableOf('user-reference.md', '## 16.', '## 17.');
 	assert.match(heading, /^## 16\. Keyboard shortcuts$/);
 	assert.doesNotMatch(section, /Ctrl\+Alt\+K|Ctrl\+Alt\+J|1\/25/);
+	const guide = tableOf('user-guide.md', '## 14.', '## 15.');
+	assert.match(guide.heading, /^## 14\. Language and shortcuts$/);
+	const shown = shownOf(guide.rows);
+	assert.ok(shown.length >= 10);
+	const known = new Set([...expectedOf('en'), ...DOC_FIXED, ...Array.from('ABRIOMNFU')]);
+	for (const label of shown) assert.ok(known.has(label), `${label} in user-guide.md is not a working shortcut`);
 });

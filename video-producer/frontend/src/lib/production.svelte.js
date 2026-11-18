@@ -19,6 +19,7 @@ import { LIMITS, SHEET, leastSeconds } from './reception.js';
 import { withSendings } from './vreftracks.svelte.js';
 import { loadRenditions, stopRenditions } from './renditions.svelte.js';
 import { DECK_MENU } from './deck.js';
+import { takeFrame } from './framing.js';
 
 const ESTIMATE_DELAY = 500;
 const POLL_EVERY = 5000;
@@ -219,6 +220,49 @@ function notCroppedImage(data) {
 
 export const MAX_MEGAPIXELS = Math.floor(formatsTable.startImages.maxPixels / 1_000_000);
 
+export const FRAMES_LIMIT = 512;
+const takeFrames = new Map();
+
+function takeContext(shotId) {
+	const engine = effectiveEngine(doc.clips.find((c) => c.id === shotId), doc, ui.production.quality);
+	return JSON.stringify([doc.aspect ?? null, engine.preset, engine.model, engine.profile, engine.quality, doc.engine?.sizes ?? null, ui.me?.settings?.draftResolution ?? null]);
+}
+
+function frameKeys(projectId, shotId) {
+	const context = takeContext(shotId);
+	return { own: `${projectId}|${shotId}|${context}`, shared: `${projectId}|${context}` };
+}
+
+function keepFrame(key, frame) {
+	takeFrames.delete(key);
+	takeFrames.set(key, frame);
+	while (takeFrames.size > FRAMES_LIMIT) takeFrames.delete(takeFrames.keys().next().value);
+}
+
+function keepFrames(keys, data) {
+	for (const shot of data?.shots ?? []) {
+		const key = keys.get(shot.shotId);
+		if (!key) continue;
+		keepFrame(key.own, shot.frame);
+		if (shot.frame) keepFrame(key.shared, shot.frame);
+	}
+}
+
+function freshEstimate() {
+	const request = estimateRequest();
+	if (!request || request.hold || request.key !== estimateState.key) return { data: null, failed: false };
+	return { data: estimateState.data, failed: Boolean(estimateState.error) };
+}
+
+export function thumbRatio(shotId, image = null) {
+	const fresh = freshEstimate();
+	if (fresh.failed) return takeFrame(doc, null, image);
+	const { own, shared } = frameKeys(project.id, shotId);
+	const planned = fresh.data?.shots?.find((shot) => shot.shotId === shotId);
+	const frame = planned ? planned.frame : takeFrames.has(own) ? takeFrames.get(own) : (takeFrames.get(shared) ?? null);
+	return takeFrame(doc, frame ? frame[0] / frame[1] : null, image);
+}
+
 export function notCroppedText(data = {}) {
 	const params = { image: notCroppedImage(data), max: MAX_MEGAPIXELS };
 	if (data.cause === 'storage_full') return t('generation.warn.frameNotCroppedStorage', params);
@@ -416,6 +460,7 @@ async function fireEstimate(request) {
 	estimateController = controller;
 	flyingKey = request.key;
 	estimateState.loading = true;
+	const keys = new Map(request.body.shots.map((shotId) => [shotId, frameKeys(request.projectId, shotId)]));
 	const result = await getClient().estimate(request.projectId, request.body, controller.signal);
 	if (estimateController !== controller) return;
 	estimateController = null;
@@ -427,6 +472,7 @@ async function fireEstimate(request) {
 		Object.assign(estimateState, { key: request.key, data: null, error: result.error });
 		return;
 	}
+	if (estimateRequest()?.key === request.key) keepFrames(keys, result.data);
 	Object.assign(estimateState, { key: request.key, data: result.data, error: null });
 	applyQuota(result.data.quota);
 }

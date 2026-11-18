@@ -278,6 +278,7 @@ class ShotPlan:
 
     def summary(self) -> Dict[str, Any]:
         """The shot as the estimate reports it."""
+        frame = framefit.plan_ratio(self)
         return {
             "shot_id": self.shot_id,
             "director_mode": self.director_mode,
@@ -297,6 +298,7 @@ class ShotPlan:
             "chain": self.chain,
             "chain_video": self.chain_video.trace() if self.chain_video is not None else None,
             "sheet": self.sheet.trace() if self.sheet is not None else None,
+            "frame": list(frame) if frame is not None else None,
         }
 
     def request_for(self, take_id: Optional[str] = None, seed: Optional[int] = None) -> Dict[str, Any]:
@@ -1460,7 +1462,7 @@ def _source_picture(user: User, source: Mapping[str, Any]) -> Optional[framefit.
     except Exception:
         path = None
     if path and Path(path).is_file():
-        return framefit.picture(Path(path))
+        return framefit.known_picture(Path(path))
     return _declared_picture(source.get("width"), source.get("height"))
 
 
@@ -1506,7 +1508,7 @@ def crop_warnings(user: User, doc: Mapping[str, Any], shot_id: str, request: Map
         data = {"shot_id": shot_id, "roles": bound_as, "size": f"{size[0]}x{size[1]}", "aspect": frame, "loss": lost, "chained": chained}
         if loss > formats.CROP_LOSS:
             wanted = "an end image" if bound_as == ["last"] and not chained else "a start image"
-            _add(warnings, note("frame_cropped_large", f"The {image} is {size[0]}x{size[1]}, not {frame}: it is cropped at its centre and loses {lost} % of the picture. Make {wanted} in the frame of the film instead.", **data))
+            _add(warnings, note("frame_cropped_large", f"The {image} is {size[0]}x{size[1]}, not {frame}: it is cropped at its centre and loses {lost} % of the picture. Make {wanted} in the frame of the take instead.", **data))
         else:
             _add(warnings, note("frame_cropped", f"The {image} is {size[0]}x{size[1]}, not {frame}: it is cropped at its centre ({lost} % of the picture).", **data))
 
