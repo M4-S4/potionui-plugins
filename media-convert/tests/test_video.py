@@ -286,8 +286,9 @@ def test_cancelling_stops_the_encoder_and_leaves_no_result(tmp_path, source_dir,
     worker.join(30)
 
     assert outcome["result"] == "cancelled"
-    assert encoder.poll() is not None
-    assert not encoders_writing(tmp_path.name)
+    assert all(process.poll() is not None for process in encoders)
+    known = {process.pid for process in encoders}
+    assert not [process for process in encoders_writing(tmp_path.name) if process.pid not in known]
 
 
 @pytest.mark.parametrize("fmt", ["mp4", "webm"])
