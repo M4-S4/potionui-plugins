@@ -399,12 +399,24 @@ def plugin_constants(library):
 def scratch_peak(tmp_path, monkeypatch):
     seen = []
     real = FfmpegRunner.run
+    scratch = tmp_path / "scratch"
 
-    def measured(self, *args, **kwargs):
+    def run_folder(args):
+        folders = set()
+        for arg in args:
+            try:
+                folders.add(Path(str(arg)).relative_to(scratch).parts[0])
+            except (ValueError, IndexError):
+                continue
+        [folder] = folders
+        return scratch / folder
+
+    def measured(self, args, *rest, **kwargs):
+        folder = run_folder(args)
         try:
-            return real(self, *args, **kwargs)
+            return real(self, args, *rest, **kwargs)
         finally:
-            files = [path for path in (tmp_path / "scratch").rglob("*") if path.is_file()]
+            files = [path for path in folder.rglob("*") if path.is_file()]
             seen.append((sum(path.stat().st_size for path in files), sorted(path.name for path in files)))
 
     monkeypatch.setattr(FfmpegRunner, "run", measured)
