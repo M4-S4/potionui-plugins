@@ -349,6 +349,33 @@ def test_a_lightened_video_is_a_new_mp4_item_under_its_target(library, source_di
     assert library.thumbnails(made)
 
 
+def test_h265_switched_off_shows_the_plugin_message_and_publishes_nothing(library, source_dir):
+    item = library.add(make_video(source_dir / "a.mp4"), "Clip.mp4", "video")
+
+    result = library.run("media-convert.video", {"format": "hevc"}, item)
+
+    assert result.status == "failed" and result.error.code == "tool_failed"
+    assert result.error.message.startswith("MP4 (H.265) is turned off on this server")
+    assert len(library.rows()) == 1 and library.guard.admits == []
+
+
+def test_the_admin_switch_lets_h265_through_the_real_settings(library, source_dir):
+    need_encoders("libx265", "aac")
+    repository = PluginRepository()
+    repository.create_plugin(Plugin(
+        id="media-convert", name="Media Converter", version="0.2.0", type="backend-only", enabled=True,
+        manifest_path=str(PLUGIN_ROOT / "manifest.yml"),
+    ))
+    repository.set_plugin_setting("media-convert", "allow_h265", "true")
+    item = library.add(make_video(source_dir / "a.mp4", seconds=0.5), "Clip.mp4", "video")
+
+    result = library.run("media-convert.video", {"format": "hevc"}, item)
+
+    assert result.ok, result.error
+    [made] = result.items
+    assert made.original_filename == "Clip.mp4" and made.mime_type == "video/mp4"
+
+
 def plugin_constants(library):
     impl = library.tools.get("media-convert.audio").impl
     return vars(inspect.getmodule(type(impl)))["make_room"].__globals__

@@ -26,6 +26,8 @@ H264_CRF = {"high": 18, "balanced": 23, "small": 28}
 H264_PRESET = "medium"
 VP9_CRF = {"high": 27, "balanced": 32, "small": 37}
 VP9_CPU_USED = 4
+H265_CRF = {"high": 22, "balanced": 26, "small": 30}
+H265_PRESET = "medium"
 VIDEO_AAC_KBPS = {"high": 192, "balanced": 160, "small": 128}
 VIDEO_OPUS_KBPS = {"high": 160, "balanced": 128, "small": 96}
 
@@ -36,7 +38,7 @@ FLAC_COMPRESSION = 5
 
 IMAGE_FORMATS = {"png": ".png", "jpeg": ".jpg", "webp": ".webp"}
 IMAGE_NAMES = {"png": "PNG", "jpeg": "JPEG", "webp": "WebP"}
-VIDEO_FORMATS = {"mp4": ".mp4", "mov": ".mov", "webm": ".webm"}
+VIDEO_FORMATS = {"mp4": ".mp4", "mov": ".mov", "webm": ".webm", "hevc": ".mp4"}
 VIDEO_NAMES = {"mp4": "MP4", "mov": "MOV", "webm": "WebM"}
 AUDIO_FORMATS = {"wav": ".wav", "mp3": ".mp3", "flac": ".flac", "m4a": ".m4a", "ogg": ".ogg"}
 AUDIO_NAMES = {"wav": "WAV", "mp3": "MP3", "flac": "FLAC", "m4a": "M4A", "ogg": "OGG"}
@@ -88,6 +90,10 @@ def threads() -> int:
     except (TypeError, ValueError):
         value = DEFAULT_THREADS
     return min(MAX_THREADS, max(1, value))
+
+
+def h265_allowed() -> bool:
+    return settings().get("allow_h265") is True
 
 
 def max_seconds() -> float:

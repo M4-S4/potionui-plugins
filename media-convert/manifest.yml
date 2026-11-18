@@ -30,6 +30,11 @@ settings:
     default: 30
     min: 1
     max: 30
+  - name: "allow_h265"
+    type: "boolean"
+    label: "Allow MP4 (H.265) in Convert video"
+    description: "Off by default. H.265 makes lighter files than H.264 but takes several times longer to encode. While it is off, the format stays in the list and is refused with a message."
+    default: false
   - name: "load_notice"
     type: "info"
     label: "Conversions run on the server's processor"
@@ -91,7 +96,7 @@ media_tools:
 
   - id: "media-convert.video"
     label: "Convert video"
-    description: "Save the video as MP4 or MOV (H.264) or WebM (VP9), optionally smaller"
+    description: "Save the video as MP4 or MOV (H.264), WebM (VP9) or MP4 (H.265), optionally smaller"
     icon: "film"
     accepts: [video]
     produces: video
@@ -107,6 +112,8 @@ media_tools:
           - { label: "MP4 (H.264)", value: mp4 }
           - { label: "MOV (H.264)", value: mov }
           - { label: "WebM (VP9)", value: webm }
+          - { label: "MP4 (H.265)", value: hevc }
+        description: "MP4 (H.265) works only when an admin allows it in the settings of Media Converter."
       - name: quality
         type: select
         label: "Quality"

@@ -139,8 +139,15 @@ def test_the_lighten_form_matches_the_code():
         params_for("media-convert.lighten", target=25)
 
 
+def test_h265_is_listed_in_convert_video_and_says_it_needs_an_admin():
+    assert options("media-convert.video", "format")[-1] == "hevc"
+    fmt = next(p for p in TOOLS["media-convert.video"]["params"] if p["name"] == "format")
+    assert "admin" in fmt["description"]
+
+
 def test_the_settings_match_the_code_defaults():
     settings = {entry["name"]: entry for entry in MANIFEST["settings"]}
+    assert settings["allow_h265"]["type"] == "boolean" and settings["allow_h265"]["default"] is False
     assert settings["ffmpeg_threads"]["default"] == common.DEFAULT_THREADS
     assert settings["ffmpeg_threads"]["max"] == common.MAX_THREADS
     assert settings["max_minutes"]["default"] == common.DEFAULT_MAX_MINUTES == 30
