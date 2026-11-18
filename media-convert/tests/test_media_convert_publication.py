@@ -17,6 +17,7 @@ from src.features.media_tools.service import MediaToolService
 from src.features.plugins.records import Plugin
 from src.features.plugins.repository import PluginRepository
 from src.platform.filesystem.storage_driver import LocalFileStorageDriver
+from src.platform.http.errors import InvalidInputError
 from src.platform.media_tools.ffmpeg import FfmpegRunner
 from src.platform.media_tools import MediaToolRegistry
 from src.platform.media_tools.ops import register_core_tools
@@ -354,13 +355,21 @@ def test_a_lightened_video_is_a_new_mp4_item_under_its_target(library, source_di
     assert library.thumbnails(made)
 
 
-def test_h265_switched_off_shows_the_plugin_message_and_publishes_nothing(library, source_dir):
+def test_h265_switched_off_is_refused_when_the_run_is_planned(library, source_dir, monkeypatch):
     item = library.add(make_video(source_dir / "a.mp4"), "Clip.mp4", "video")
+    started = []
+    monkeypatch.setattr(FfmpegRunner, "run", lambda self, *args, **kwargs: started.append(args))
 
-    result = library.run("media-convert.video", {"format": "hevc"}, item)
+    with pytest.raises(InvalidInputError) as refused:
+        library.run("media-convert.video", {"format": "hevc"}, item)
 
-    assert result.status == "failed" and result.error.code == "tool_failed"
-    assert result.error.message.startswith("MP4 (H.265) is turned off on this server")
+    assert refused.value.code == "invalid_params" and refused.value.extra.get("field") == "format"
+    assert refused.value.message.startswith("MP4 (H.265) is turned off on this server")
+    steps = [{"tool": "media-convert.video", "params": {"format": "mp4"}}, {"tool": "media-convert.video", "params": {"format": "hevc"}}]
+    with pytest.raises(InvalidInputError) as chained:
+        library.service.run_blocking(USER, steps, [{"item_id": item.id}], timeout=WAIT_SECONDS)
+    assert chained.value.extra.get("step_index") == 1
+    assert started == []
     assert len(library.rows()) == 1 and library.guard.admits == []
 
 

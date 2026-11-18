@@ -1,8 +1,9 @@
 import math
+import os
 import time
 from typing import Callable
 
-from src.plugin_api.media_tools import MediaTool, ToolFailed
+from src.plugin_api.media_tools import InvalidToolParams, MediaTool, ToolFailed
 
 from .common import (
     H264_CRF,
@@ -19,6 +20,7 @@ from .common import (
     check_duration,
     check_length,
     check_size,
+    count_frames,
     fit,
     guard,
     h265_allowed,
@@ -44,8 +46,8 @@ H265_OFF = (
 ENCODE_SECONDS = 1800.0
 H265_SHARE = 0.6
 H265_PIXELS_PER_THREAD_SECOND = 2_500_000
-H265_SAMPLE_SECONDS = 4.0
-FALLBACK_RATE = 30.0
+H265_SAMPLES = (0.25, 0.5, 0.75)
+H265_SAMPLE_SECONDS = 2.0
 
 
 def video_codec_args(fmt: str, level: str) -> list[str]:
@@ -79,7 +81,17 @@ def audio_codec_args(fmt: str, level: str, tracks: list) -> list[str]:
 
 
 def encode_budget(ctx) -> float:
-    return float(getattr(ctx.runner, "timeout", ENCODE_SECONDS) or ENCODE_SECONDS) * H265_SHARE
+    try:
+        value = float(getattr(ctx.runner, "timeout", ENCODE_SECONDS))
+    except (TypeError, ValueError, OverflowError):
+        value = ENCODE_SECONDS
+    if not math.isfinite(value) or value <= 0:
+        value = ENCODE_SECONDS
+    return min(value, ENCODE_SECONDS) * H265_SHARE
+
+
+def usable_threads() -> int:
+    return max(1, min(threads(), os.cpu_count() or 1))
 
 
 def minutes_text(seconds: float) -> str:
@@ -94,23 +106,33 @@ def too_slow(estimate: float) -> ToolFailed:
     )
 
 
-def check_h265_time(ctx, sample_args: Callable, width: int, height: int, rate: float, duration) -> None:
-    if not duration:
-        duration = max_seconds()
-    seconds = min(duration, max_seconds() + 1)
+def sample_starts(seconds: float, length: float) -> list[float]:
+    return [min(max(0.0, seconds * point - length / 2), max(0.0, seconds - length)) for point in H265_SAMPLES]
+
+
+def check_h265_time(ctx, sample_args: Callable, width: int, height: int, frames, seconds: float) -> None:
     budget = encode_budget(ctx)
-    if width * height * rate * seconds <= H265_PIXELS_PER_THREAD_SECOND * threads() * budget:
+    if frames and width * height * frames <= H265_PIXELS_PER_THREAD_SECOND * usable_threads() * budget:
         return
-    sample = min(H265_SAMPLE_SECONDS, seconds)
-    started = time.monotonic()
-    ctx.ffmpeg([*sample_args(sample), "-f", "null", "-"], duration=sample)
-    estimate = (time.monotonic() - started) * seconds / sample
-    guard(ctx)
+    length = min(H265_SAMPLE_SECONDS, seconds / len(H265_SAMPLES))
+    slowest = 0.0
+    for number, start in enumerate(sample_starts(seconds, length)):
+        began = time.monotonic()
+        ctx.scoped(number / len(H265_SAMPLES), (number + 1) / len(H265_SAMPLES)).ffmpeg(
+            [*sample_args(start, length), "-f", "null", "-"], duration=length,
+        )
+        slowest = max(slowest, time.monotonic() - began)
+        guard(ctx)
+    estimate = slowest * seconds / length
     if estimate > budget:
         raise too_slow(estimate)
 
 
 class ConvertVideo(MediaTool):
+    def check_params(self, params: dict) -> None:
+        if params.get("format") == "hevc" and not h265_allowed():
+            raise InvalidToolParams("format", H265_OFF)
+
     def run(self, inputs, params, ctx):
         return [self.convert(media, params, ctx) for media in inputs]
 
@@ -153,20 +175,24 @@ class ConvertVideo(MediaTool):
         args += metadata_args(streams, None, keep)
         if fmt != "webm":
             args += ["-movflags", "+faststart"]
-        encoder = ctx
-        if fmt == "hevc":
-            sample = [*thread_args(), *input_args(media.path, MAX_VIDEO_PIXELS), "-map", f"0:{picture.index}"]
-            if (width, height) != (media.width, media.height):
-                sample += ["-vf", f"scale={width}:{height}:flags=lanczos"]
-            sample += ["-an", "-sn", "-dn", *video_codec_args(fmt, level)]
-            check_h265_time(
-                ctx.scoped(0.0, 0.05), lambda seconds: [*sample, "-t", f"{seconds:.3f}", *thread_args()[:2]],
-                width, height, picture.rate or media.fps or FALLBACK_RATE, longest(media.duration, streams.duration),
-            )
-            encoder = ctx.scoped(0.05, 1.0)
         out = ctx.new_path(VIDEO_FORMATS[fmt])
         room = make_room(ctx, output_cap(media.path))
         try:
+            encoder = ctx
+            if fmt == "hevc":
+                sample = [*input_args(media.path, MAX_VIDEO_PIXELS), "-map", f"0:{picture.index}"]
+                if (width, height) != (media.width, media.height):
+                    sample += ["-vf", f"scale={width}:{height}:flags=lanczos"]
+                sample += ["-an", "-sn", "-dn", *video_codec_args(fmt, level)]
+                seconds = min(longest(media.duration, streams.duration) or max_seconds(), max_seconds() + 1)
+                check_h265_time(
+                    ctx.scoped(0.0, 0.05),
+                    lambda start, length: [
+                        *thread_args(), "-ss", f"{start:.3f}", "-t", f"{length:.3f}", *sample, *thread_args()[:2],
+                    ],
+                    width, height, count_frames(media.path, picture.index), seconds,
+                )
+                encoder = ctx.scoped(0.05, 1.0)
             args += [*limit_args(room), *thread_args()[:2], str(out)]
             encoder.ffmpeg(args, duration=media.duration)
             guard(ctx)
