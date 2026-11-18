@@ -1,4 +1,6 @@
+import subprocess
 import threading
+from pathlib import Path
 
 import psutil
 import pytest
@@ -245,12 +247,19 @@ def encoders_writing(marker):
     return found
 
 
-def test_cancelling_stops_the_encoder_and_leaves_no_result(tmp_path, source_dir):
+def test_cancelling_stops_the_encoder_and_leaves_no_result(tmp_path, source_dir, monkeypatch):
     need_encoders("libx264", "aac")
     path = make_video(source_dir / "long.mp4", seconds=40.0, size=(640, 360), fps=25, source="testsrc2")
     started = threading.Event()
     stop = threading.Event()
     scratch = tmp_path / "scratch"
+    encoders = []
+
+    class Watched(subprocess.Popen):
+        def __init__(self, command, *args, **kwargs):
+            super().__init__(command, *args, **kwargs)
+            if Path(str(command[0])).stem.lower() == "ffmpeg" and any(str(scratch) in str(part) for part in command):
+                encoders.append(self)
 
     def progress(fraction, label):
         if fraction > 0:
@@ -267,20 +276,17 @@ def test_cancelling_stops_the_encoder_and_leaves_no_result(tmp_path, source_dir)
         except ToolCancelled:
             outcome["result"] = "cancelled"
 
+    monkeypatch.setattr(subprocess, "Popen", Watched)
     worker = threading.Thread(target=work)
     worker.start()
     assert started.wait(60)
-    seen = []
-    for _ in range(100):
-        seen = encoders_writing(tmp_path.name)
-        if seen or not worker.is_alive():
-            break
-        threading.Event().wait(0.02)
-    assert seen
+    [encoder] = encoders
+    assert encoder.poll() is None
     stop.set()
     worker.join(30)
 
     assert outcome["result"] == "cancelled"
+    assert encoder.poll() is not None
     assert not encoders_writing(tmp_path.name)
 
 
