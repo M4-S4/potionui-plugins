@@ -33,7 +33,7 @@ settings:
   - name: "allow_h265"
     type: "boolean"
     label: "Allow MP4 (H.265) in Convert video"
-    description: "Off by default. H.265 makes lighter files than H.264 but takes several times longer to encode. While it is off, the format stays in the list and is refused with a message."
+    description: "Off by default. H.265 makes lighter files than H.264 but takes several times longer to encode, and some browsers and devices cannot play it. While it is off, the format stays in the list and is refused with a message."
     default: false
   - name: "load_notice"
     type: "info"
@@ -229,7 +229,7 @@ media_tools:
         type: select
         label: "Format"
         default: gif
-        description: "A GIF plays everywhere; an animated WebP is two to three times lighter."
+        description: "A GIF plays everywhere but grows fast with grain and movement, about 3 MB per second at 640 px on grainy footage in our tests; an animated WebP was 2 to 16 times lighter in our tests."
         options:
           - { label: "GIF", value: gif }
           - { label: "Animated WebP", value: webp }
@@ -291,7 +291,7 @@ media_tools:
         type: select
         label: "Largest size"
         default: 16
-        description: "A video already lighter than this, in MP4 or MOV with an H.264 picture and AAC sound, is copied without being encoded again."
+        description: "A video already lighter than this, in MP4 or MOV with an 8-bit 4:2:0 H.264 picture and AAC sound in mono or stereo, is copied without being encoded again."
         options:
           - { label: "8 MB", value: 8 }
           - { label: "16 MB", value: 16 }
