@@ -294,7 +294,11 @@ def test_an_image_above_the_pixel_cap_shows_the_plugin_message(library, source_d
     assert result.error.message.startswith("This image is 8193 × 8192 pixels; Media Converter takes images of up to 67 million")
 
 
-def test_a_replace_asked_outside_the_window_keeps_the_old_name_over_the_new_content(library, source_dir):
+def core_renames_on_replace():
+    return "original_filename" in inspect.signature(UploadRepository.replace_file).parameters
+
+
+def test_a_replace_asked_outside_the_window_puts_the_new_content_in_the_same_item(library, source_dir):
     item = library.add(make_image(source_dir / "a.png", size=(32, 24)), "Chat.png", "image")
 
     result = library.service.run_blocking(
@@ -304,8 +308,9 @@ def test_a_replace_asked_outside_the_window_keeps_the_old_name_over_the_new_cont
 
     assert result.ok and result.replaced
     row = library.repo.get_by_id(item.id, USER)
-    assert row.original_filename == "Chat.png"
+    assert row.original_filename == ("Chat.webp" if core_renames_on_replace() else "Chat.png")
     assert row.filename.endswith(".webp") and row.mime_type == "image/webp"
+    assert len(library.rows()) == 1
 
 
 def test_a_video_becomes_a_looping_gif_item_with_a_thumbnail(library, source_dir):
