@@ -13,7 +13,7 @@ Version 0.2.0. It needs PotionUI 0.2.0 or later.
 
 Updating from 0.1.0 or 0.1.1 to 0.2.0 needs its own order: disable Media Converter in **Admin › Plugins**, restart PotionUI, update it from the catalogue, then enable it. Tried in another order, the tools of the new version may not load: the update or the enabling ends with an error, and Media Converter stays on its old version or without its tools. If that happens, start again from the first step, and skip the update step if the catalogue already shows 0.2.0 installed.
 
-![The Library in the dark theme, with the Edit menu of a video open: Convert video and Extract sound, each marked Media Convert, below the tools of PotionUI](https://raw.githubusercontent.com/M4-S4/potionui-plugins/main/media-convert/docs/screenshots/tools-menu-dark.webp)
+![The Library in the dark theme, with the Edit menu of a video open: Convert video, Extract sound, Make an animation and Lighten for sending, each marked Media Convert, below the tools of PotionUI](https://raw.githubusercontent.com/M4-S4/potionui-plugins/main/media-convert/docs/screenshots/tools-menu-dark.webp)
 
 ## What it needs on the server
 
@@ -49,6 +49,8 @@ The tool window always saves a new item and never offers to replace the original
 ### Make an animation
 
 Pick the format, where the animation starts in the video, how long it lasts (10 seconds by default, from half a second to 30), its largest side (640, 480 or 320 px, never larger than the video), its frame rate and its quality. The result is an image item, `Clip.gif` or `Clip.webp`, that loops forever.
+
+![The Make an animation window on a 1920 × 1080 clip of 20 seconds: GIF, start 0, length 10 seconds, 480 px, frame rate Like the video, quality Balanced](https://raw.githubusercontent.com/M4-S4/potionui-plugins/main/media-convert/docs/screenshots/make-animation-dark.webp)
 
 - A GIF plays everywhere but grows fast with grain and movement: in our tests, 16 seconds of grainy footage at 640 px made a GIF of 47 MB, and 15 seconds at 320 px and Half one of 5 MB. An animated WebP plays in current browsers and weighed 2 to 16 times less than the GIF in our tests, the most on grainy footage. For a light GIF, pick 320 px, Half or A third.
 - The frame rate is the video's own, divided by the smallest whole number that brings it to 25 per second or less, and the other two steps keep every second or every third frame of that: a 16 fps clip gives 16, 8 or about 5 frames per second, a 30 fps clip 15, 7.5 or 5. The motion stays even.
