@@ -8,7 +8,7 @@ from src.plugin_api.media_tools import InvalidToolParams, ToolCancelled, ToolCon
 from tools import common, video
 from tools.video import H265_OFF, ConvertVideo
 
-from .conftest import MANIFEST, TOOLS, make_video, need_encoders, params_for, probe, run_ffmpeg, streams_of
+from .conftest import MANIFEST, TOOLS, lying_length, lying_rate, make_video, need_encoders, params_for, probe, run_ffmpeg, streams_of
 
 TOOL = "media-convert.video"
 
@@ -51,11 +51,17 @@ class Quiet:
         return False
 
 
-def sampled(monkeypatch, steps, *, frames=None, seconds=100.0, budget=60.0):
+def sampled(monkeypatch, steps, *, frames=None, seconds=100.0, budget=60.0, counted=None):
     monkeypatch.setattr(video, "time", Clock(steps))
     monkeypatch.setattr(video, "encode_budget", lambda ctx: budget)
     fake = Quiet()
-    video.check_h265_time(fake, lambda start, length: ["-ss", f"{start:.3f}", "-t", f"{length:.3f}"], 1920, 1080, frames, seconds)
+    if counted is None:
+        counted = frames is not None
+    if frames is None:
+        frames = round(seconds * 10)
+    video.check_h265_time(
+        fake, lambda start, count: ["-ss", f"{start:.3f}", "-frames:v", str(count)], 1920, 1080, frames, seconds, counted,
+    )
     return fake
 
 
@@ -160,7 +166,8 @@ def test_a_long_video_is_timed_on_three_parts_with_the_same_threads_and_pool(ctx
     assert starts == pytest.approx([2.0, 5.0, 8.0], abs=0.05)
     for sample in samples:
         assert sample[-3:] == ["-f", "null", "-"] and "-an" in sample
-        assert sample.index("-ss") < sample.index("-i") and sample[sample.index("-t") + 1] == "2.000"
+        assert sample.index("-ss") < sample.index("-i") and "-t" not in sample[:sample.index("-i")]
+        assert sample[sample.index("-frames:v") + 1] == "20"
         assert [value for flag, value in zip(sample, sample[1:]) if flag == "-threads"] == ["3", "3"]
         assert sample[sample.index("-x265-params") + 1] == encode[encode.index("-x265-params") + 1] == "pools=3:log-level=error"
     assert streams_of(result.path, "video")[0]["codec_name"] == "hevc"
@@ -172,6 +179,22 @@ def test_the_estimate_follows_the_slowest_part(monkeypatch):
 
     assert refused.value.message.startswith("MP4 (H.265) would take about 2 minutes ")
     sampled(monkeypatch, [0.1, 0.2, 1.0, 0.1, 0.1, 0.2], seconds=100.0, budget=60.0)
+
+
+def test_the_estimate_follows_the_frames_when_the_file_states_a_shorter_length(monkeypatch):
+    with pytest.raises(ToolFailed) as refused:
+        sampled(monkeypatch, [1.0, 0.0] * 3, frames=1200, seconds=1.0, budget=9.0, counted=False)
+
+    assert refused.value.message.startswith("MP4 (H.265) would take about 1 minute ")
+    calls = sampled(monkeypatch, [1.0, 0.0] * 3, frames=1200, seconds=1.0, budget=10.0, counted=False).calls
+    assert [call[call.index("-frames:v") + 1] for call in calls] == ["120"] * 3
+
+
+@pytest.mark.parametrize("frames, seconds, each", [
+    (1000, 100.0, 20), (10_000_000, 100.0, 120), (6, 100.0, 1), (2, 0.0, 1), (9, 0.0, 3), (90, 2.0, 30),
+])
+def test_each_part_is_a_bounded_number_of_frames(frames, seconds, each):
+    assert video.sample_frames(frames, seconds) == each
 
 
 def test_an_estimate_equal_to_the_budget_passes_and_one_just_above_is_refused(monkeypatch):
@@ -223,20 +246,122 @@ def test_the_shortcut_counts_the_frames_the_file_holds_and_the_cores_of_the_serv
     assert len(sampled(monkeypatch, [0.0] * 6, frames=None).calls) == 3
 
 
+@pytest.mark.parametrize("cpu_max, cores", [
+    ("200000 100000\n", 2), ("150000 100000\n", 2), ("max 100000\n", 24), ("50000 100000", 1),
+    ("0 100000", 24), ("abc 100000", 24), ("", 24),
+])
+def test_a_processor_limit_on_the_container_bounds_the_cores(tmp_path, monkeypatch, cpu_max, cores):
+    limit = tmp_path / "cpu.max"
+    limit.write_text(cpu_max, encoding="ascii")
+    monkeypatch.setattr(video, "CPU_MAX", limit)
+    monkeypatch.setattr(video, "CFS_QUOTA", tmp_path / "none")
+    monkeypatch.setattr(video.os, "cpu_count", lambda: 24)
+    monkeypatch.setattr(video.os, "sched_getaffinity", lambda pid: set(range(24)), raising=False)
+
+    assert video.server_cores() == cores
+
+
+@pytest.mark.parametrize("quota, cores", [("300000", 3), ("-1", 24)])
+def test_the_older_processor_limit_files_are_read_too(tmp_path, monkeypatch, quota, cores):
+    (tmp_path / "quota").write_text(quota + "\n", encoding="ascii")
+    (tmp_path / "period").write_text("100000\n", encoding="ascii")
+    monkeypatch.setattr(video, "CPU_MAX", tmp_path / "none")
+    monkeypatch.setattr(video, "CFS_QUOTA", tmp_path / "quota")
+    monkeypatch.setattr(video, "CFS_PERIOD", tmp_path / "period")
+    monkeypatch.setattr(video.os, "cpu_count", lambda: 24)
+
+    assert video.server_cores() == cores
+
+
+def test_the_cores_the_process_may_run_on_bound_them_too(tmp_path, monkeypatch, server_settings):
+    server_settings["ffmpeg_threads"] = 16
+    monkeypatch.setattr(video, "CPU_MAX", tmp_path / "none")
+    monkeypatch.setattr(video, "CFS_QUOTA", tmp_path / "none")
+    monkeypatch.setattr(video.os, "cpu_count", lambda: 24)
+    monkeypatch.setattr(video.os, "sched_getaffinity", lambda pid: {0, 1, 2}, raising=False)
+
+    assert video.usable_threads() == 3
+
+
 def test_the_frames_counted_are_the_frames_in_the_file(ctx, source_dir, allowed, monkeypatch):
     path = make_video(source_dir / "clip.mp4", seconds=2.0, size=(64, 48), fps=10)
     seen = []
     real = video.check_h265_time
 
-    def spy(ctx, sample_args, width, height, frames, seconds):
-        seen.append(frames)
-        return real(ctx, sample_args, width, height, frames, seconds)
+    def spy(ctx, sample_args, width, height, frames, seconds, counted):
+        seen.append((frames, counted))
+        return real(ctx, sample_args, width, height, frames, seconds, counted)
 
     monkeypatch.setattr(video, "check_h265_time", spy)
 
     convert(ctx, path)
 
-    assert seen == [20]
+    assert seen == [(20, True)]
+
+
+def test_the_shortcut_takes_the_frames_counted_in_a_file_that_states_too_low_a_rate(ctx, source_dir, allowed, monkeypatch):
+    path = lying_rate(source_dir)
+    assert common.read_streams(path).video.rate == pytest.approx(1.0)
+    monkeypatch.setattr(video, "usable_threads", lambda: 1)
+    monkeypatch.setattr(video, "encode_budget", lambda ctx: 1.0)
+    monkeypatch.setattr(video, "H265_PIXELS_PER_THREAD_SECOND", 320 * 240 * 10)
+
+    convert(ctx, path)
+
+    *samples, encode = ctx.commands
+    assert len(samples) == 3 and all(sample[-3:] == ["-f", "null", "-"] for sample in samples)
+    assert [sample[sample.index("-frames:v") + 1] for sample in samples] == ["50"] * 3
+
+
+def test_without_a_frame_count_the_trial_always_runs_on_the_stated_rate(ctx, source_dir, allowed, monkeypatch):
+    path = make_video(source_dir / "clip.mp4", seconds=2.0, size=(64, 48), fps=10)
+    monkeypatch.setattr(video, "count_frames", lambda *args: None)
+    seen = []
+    real = video.check_h265_time
+
+    def spy(ctx, sample_args, width, height, frames, seconds, counted):
+        seen.append((frames, counted))
+        return real(ctx, sample_args, width, height, frames, seconds, counted)
+
+    monkeypatch.setattr(video, "check_h265_time", spy)
+
+    convert(ctx, path)
+
+    assert seen == [(23, False)]
+    assert len(ctx.commands) == 4
+
+
+def test_a_file_that_states_a_shorter_length_is_timed_across_its_whole_picture(ctx, source_dir, allowed, monkeypatch):
+    path = lying_length(source_dir)
+    assert ctx.probe(path, "video").duration == pytest.approx(1.0)
+    monkeypatch.setattr(video, "H265_PIXELS_PER_THREAD_SECOND", 1)
+
+    convert(ctx, path)
+
+    samples = ctx.commands[:3]
+    assert [float(sample[sample.index("-ss") + 1]) for sample in samples] == pytest.approx([4.0, 9.0, 14.0], abs=0.05)
+    assert [sample[sample.index("-frames:v") + 1] for sample in samples] == ["50"] * 3
+
+
+def test_cancelling_while_the_frames_are_counted_stops_h265_before_any_encoding(tmp_path, source_dir, allowed, monkeypatch, no_grants):
+    need_encoders("libx265", "aac")
+    path = make_video(source_dir / "clip.mp4", seconds=2.0, size=(64, 48), fps=10)
+    stop = []
+    ctx = ToolContext(tmp_path / "scratch", is_cancelled=lambda: bool(stop))
+    seen = []
+
+    def stopped(found, index, is_cancelled=None):
+        stop.append(1)
+        seen.append(is_cancelled())
+        raise ToolCancelled()
+
+    monkeypatch.setattr(video, "count_frames", stopped)
+
+    with pytest.raises(ToolCancelled):
+        ConvertVideo().run([ctx.probe(path, "video")], params_for(TOOL, format="hevc"), ctx)
+    assert seen == [True]
+    assert ctx.commands == []
+    assert not no_grants
 
 
 def test_the_trial_waits_for_the_room_and_a_full_storage_refuses_first(ctx, source_dir, allowed, monkeypatch):

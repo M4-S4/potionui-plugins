@@ -1,7 +1,8 @@
 import math
 import os
 import time
-from typing import Callable
+from pathlib import Path
+from typing import Callable, Optional
 
 from src.plugin_api.media_tools import InvalidToolParams, MediaTool, ToolFailed
 
@@ -48,6 +49,9 @@ H265_SHARE = 0.6
 H265_PIXELS_PER_THREAD_SECOND = 2_500_000
 H265_SAMPLES = (0.25, 0.5, 0.75)
 H265_SAMPLE_SECONDS = 2.0
+H265_SAMPLE_FRAMES = 120
+CAP_FALLBACK_RATE = 60.0
+FRAME_SLACK = 1.02
 
 
 def video_codec_args(fmt: str, level: str) -> list[str]:
@@ -90,8 +94,40 @@ def encode_budget(ctx) -> float:
     return min(value, ENCODE_SECONDS) * H265_SHARE
 
 
+CPU_MAX = Path("/sys/fs/cgroup/cpu.max")
+CFS_QUOTA = Path("/sys/fs/cgroup/cpu/cpu.cfs_quota_us")
+CFS_PERIOD = Path("/sys/fs/cgroup/cpu/cpu.cfs_period_us")
+
+
+def quota_cores() -> Optional[int]:
+    try:
+        quota, period = CPU_MAX.read_text(encoding="ascii").split()[:2]
+    except (OSError, ValueError):
+        try:
+            quota, period = CFS_QUOTA.read_text(encoding="ascii").strip(), CFS_PERIOD.read_text(encoding="ascii").strip()
+        except OSError:
+            return None
+    try:
+        allowed, length = int(quota), int(period)
+    except ValueError:
+        return None
+    if allowed <= 0 or length <= 0:
+        return None
+    return max(1, math.ceil(allowed / length))
+
+
+def server_cores() -> int:
+    found = os.cpu_count() or 1
+    try:
+        found = min(found, len(os.sched_getaffinity(0)))
+    except (AttributeError, OSError):
+        pass
+    limit = quota_cores()
+    return max(1, min(found, limit) if limit else found)
+
+
 def usable_threads() -> int:
-    return max(1, min(threads(), os.cpu_count() or 1))
+    return max(1, min(threads(), server_cores()))
 
 
 def minutes_text(seconds: float) -> str:
@@ -110,20 +146,26 @@ def sample_starts(seconds: float, length: float) -> list[float]:
     return [min(max(0.0, seconds * point - length / 2), max(0.0, seconds - length)) for point in H265_SAMPLES]
 
 
-def check_h265_time(ctx, sample_args: Callable, width: int, height: int, frames, seconds: float) -> None:
+def sample_frames(frames: int, seconds: float) -> int:
+    wanted = math.ceil(frames * H265_SAMPLE_SECONDS / seconds) if seconds > 0 else H265_SAMPLE_FRAMES
+    return max(1, min(wanted, H265_SAMPLE_FRAMES, frames // len(H265_SAMPLES) or 1))
+
+
+def check_h265_time(ctx, sample_args: Callable, width: int, height: int, frames: int, seconds: float, counted: bool) -> None:
     budget = encode_budget(ctx)
-    if frames and width * height * frames <= H265_PIXELS_PER_THREAD_SECOND * usable_threads() * budget:
+    if counted and width * height * frames <= H265_PIXELS_PER_THREAD_SECOND * usable_threads() * budget:
         return
-    length = min(H265_SAMPLE_SECONDS, seconds / len(H265_SAMPLES))
+    each = sample_frames(frames, seconds)
+    length = each * seconds / frames
     slowest = 0.0
     for number, start in enumerate(sample_starts(seconds, length)):
         began = time.monotonic()
         ctx.scoped(number / len(H265_SAMPLES), (number + 1) / len(H265_SAMPLES)).ffmpeg(
-            [*sample_args(start, length), "-f", "null", "-"], duration=length,
+            [*sample_args(start, each), "-f", "null", "-"], duration=length,
         )
         slowest = max(slowest, time.monotonic() - began)
         guard(ctx)
-    estimate = slowest * seconds / length
+    estimate = slowest * frames / each
     if estimate > budget:
         raise too_slow(estimate)
 
@@ -184,13 +226,18 @@ class ConvertVideo(MediaTool):
                 if (width, height) != (media.width, media.height):
                     sample += ["-vf", f"scale={width}:{height}:flags=lanczos"]
                 sample += ["-an", "-sn", "-dn", *video_codec_args(fmt, level)]
-                seconds = min(longest(media.duration, streams.duration) or max_seconds(), max_seconds() + 1)
+                seconds = min(
+                    longest(media.duration, streams.duration, picture.duration) or max_seconds(), max_seconds() + 1,
+                )
+                counted = count_frames(media.path, picture.index, ctx.is_cancelled)
+                guard(ctx)
+                frames = counted or math.ceil(seconds * (picture.rate or media.fps or CAP_FALLBACK_RATE) * FRAME_SLACK) + 2
                 check_h265_time(
                     ctx.scoped(0.0, 0.05),
-                    lambda start, length: [
-                        *thread_args(), "-ss", f"{start:.3f}", "-t", f"{length:.3f}", *sample, *thread_args()[:2],
+                    lambda start, count: [
+                        *thread_args(), "-ss", f"{start:.3f}", *sample, "-frames:v", str(count), *thread_args()[:2],
                     ],
-                    width, height, count_frames(media.path, picture.index), seconds,
+                    width, height, frames, seconds, counted is not None,
                 )
                 encoder = ctx.scoped(0.05, 1.0)
             args += [*limit_args(room), *thread_args()[:2], str(out)]
