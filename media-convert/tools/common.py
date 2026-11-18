@@ -4,6 +4,7 @@ import math
 import shutil
 import subprocess
 import threading
+import time
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Optional
@@ -53,6 +54,7 @@ DEFAULT_MAX_MINUTES = 30
 MAX_MINUTES = 30
 PROBE_TIMEOUT_SECONDS = 30
 COUNT_TIMEOUT_SECONDS = 60
+COUNT_POLL_SECONDS = 0.1
 
 MAX_IMAGE_PIXELS = 8192 * 8192
 MAX_VIDEO_PIXELS = 4096 * 2304
@@ -439,20 +441,33 @@ def read_streams(path: Path) -> Streams:
     return Streams(streams=streams, tags=dict(container.get("tags") or {}), duration=duration)
 
 
-def count_frames(path: Path, index: int) -> Optional[int]:
+def count_frames(path: Path, index: int, is_cancelled=None) -> Optional[int]:
     command = [
         ffprobe_binary(), "-v", "error", "-protocol_whitelist", "file", "-format_whitelist", DEMUXERS,
         "-select_streams", str(int(index)), "-count_packets", "-show_entries", "stream=nb_read_packets",
         "-of", "csv=p=0", str(Path(path).resolve()),
     ]
     try:
-        result = subprocess.run(
-            command, capture_output=True, text=True, encoding="utf-8", errors="replace",
-            timeout=COUNT_TIMEOUT_SECONDS, stdin=subprocess.DEVNULL,
+        process = subprocess.Popen(
+            command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL,
+            text=True, encoding="utf-8", errors="replace",
         )
-    except (OSError, subprocess.SubprocessError):
+    except OSError:
         return None
-    found = whole((result.stdout or "").strip().split(",")[0]) if result.returncode == 0 else 0
+    deadline = time.monotonic() + COUNT_TIMEOUT_SECONDS
+    while True:
+        try:
+            output, _ = process.communicate(timeout=COUNT_POLL_SECONDS)
+            break
+        except subprocess.TimeoutExpired:
+            cancelled = bool(is_cancelled and is_cancelled())
+            if cancelled or time.monotonic() >= deadline:
+                process.kill()
+                process.communicate()
+                if cancelled:
+                    raise ToolCancelled()
+                return None
+    found = whole((output or "").strip().split(",")[0]) if process.returncode == 0 else 0
     return found or None
 
 
