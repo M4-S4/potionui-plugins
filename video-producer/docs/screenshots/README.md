@@ -4,9 +4,9 @@ Twenty-four images of the plugin alone, English interface: the three that the RE
 
 ## User guide
 
-These nine images were taken on 18 November 2026 on a development instance of PotionUI that served the `dev` branch of the fork, with Video Producer at the same commit, in the dark theme, in a browser viewport of 1440 x 900 at a device scale of 1. The five full-window images are the whole viewport; the four others are crops of it at the size of the window, drawer or popover they show, without reduction.
+These nine images were taken on 18 November 2026 on a development instance of PotionUI that served the `dev` branch of the fork, with Video Producer at the same commit, in the dark theme, in a browser viewport of 1440 x 900 at a device scale of 1. The five full-window images are the whole viewport; the four others are crops of it around the window, drawer or popover they show, without reduction.
 
-The project is the starter project "Lumi’s potion", made by the plugin's own code for a test account and stored on the instance under a test name, then opened in the page. Nothing was generated: the project has no take, and the engine of the project was set to MiniMax H3 (12 GB) in the **Generation settings** drawer. Two things are staged: the browser wrote "Lumi’s potion" over the test name in the project bar and in the file name of the export window, just before each capture; and the estimate is the instance's own, measured on 20 earlier takes of that preset.
+The project is the starter project "Lumi’s potion", made by the plugin's own code for a test account and stored on the instance under a test name, then opened in the page. Nothing was generated: the project has no take, and the engine of the project was set to MiniMax H3 (12 GB) in the **Generation settings** drawer. One thing is staged: the browser wrote "Lumi’s potion" over the test name in the project bar and in the file name of the export window, just before each capture. The estimate is the instance's own, measured on 20 earlier takes of that preset.
 
 | Image | What it shows |
 |---|---|
