@@ -52,6 +52,7 @@ MAX_THREADS = 16
 DEFAULT_MAX_MINUTES = 30
 MAX_MINUTES = 30
 PROBE_TIMEOUT_SECONDS = 30
+COUNT_TIMEOUT_SECONDS = 60
 
 MAX_IMAGE_PIXELS = 8192 * 8192
 MAX_VIDEO_PIXELS = 4096 * 2304
@@ -245,10 +246,10 @@ def refuse(room: Room, needed: int) -> None:
     raise ToolFailed(room_message(room))
 
 
-def make_room(ctx, cap: int, needed: int = 0, unstoppable: int = 0) -> Room:
+def make_room(ctx, cap: int, needed: int = 0, unstoppable: int = 0, scratch: int = 0) -> Room:
     folder = Path(ctx.scratch_dir)
     folder.mkdir(parents=True, exist_ok=True)
-    quota = quota_rooms(ctx, scratch_bytes(folder))
+    quota = [replace(item, size=item.size + scratch) for item in quota_rooms(ctx, scratch_bytes(folder))]
     with GRANTS_LOCK:
         found = rooms(ctx, cap, quota)
         for item in found:
@@ -324,6 +325,7 @@ class Stream:
     pix_fmt: str = ""
     bit_rate: int = 0
     rate: Optional[float] = None
+    duration: Optional[float] = None
 
 
 @dataclass(frozen=True)
@@ -369,6 +371,23 @@ def frame_rate(value) -> Optional[float]:
     return rate if math.isfinite(rate) and rate > 0 else None
 
 
+def stream_seconds(item: dict) -> Optional[float]:
+    tags = {str(key).lower(): value for key, value in dict(item.get("tags") or {}).items()}
+    for value in (item.get("duration"), tags.get("duration")):
+        text = str(value or "").strip()
+        try:
+            if ":" in text:
+                hours, minutes, seconds = text.split(":")
+                found = int(hours) * 3600 + int(minutes) * 60 + float(seconds)
+            else:
+                found = float(text) if text else 0.0
+        except ValueError:
+            continue
+        if math.isfinite(found) and found > 0:
+            return found
+    return None
+
+
 def ffprobe_binary() -> str:
     ffmpeg = find_ffmpeg()
     if ffmpeg:
@@ -408,6 +427,7 @@ def read_streams(path: Path) -> Streams:
             pix_fmt=str(item.get("pix_fmt") or ""),
             bit_rate=whole(item.get("bit_rate")),
             rate=frame_rate(item.get("avg_frame_rate")) or frame_rate(item.get("r_frame_rate")),
+            duration=stream_seconds(item),
         )
         for item in payload.get("streams") or []
     )
@@ -417,6 +437,23 @@ def read_streams(path: Path) -> Streams:
     except (TypeError, ValueError):
         duration = None
     return Streams(streams=streams, tags=dict(container.get("tags") or {}), duration=duration)
+
+
+def count_frames(path: Path, index: int) -> Optional[int]:
+    command = [
+        ffprobe_binary(), "-v", "error", "-protocol_whitelist", "file", "-format_whitelist", DEMUXERS,
+        "-select_streams", str(int(index)), "-count_packets", "-show_entries", "stream=nb_read_packets",
+        "-of", "csv=p=0", str(Path(path).resolve()),
+    ]
+    try:
+        result = subprocess.run(
+            command, capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=COUNT_TIMEOUT_SECONDS, stdin=subprocess.DEVNULL,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    found = whole((result.stdout or "").strip().split(",")[0]) if result.returncode == 0 else 0
+    return found or None
 
 
 def metadata_args(streams: Streams, audio: Optional[Stream], keep: bool) -> list[str]:
