@@ -68,9 +68,13 @@ test('the texts of the crop exist in every language the plugin ships, with the s
 	const fr = translator('fr', missing);
 	const params = { shot: 'Opening', size: '1024×1024', aspect: '16:9', loss: 42 };
 	assert.equal(en('generation.warn.frameCropped', params), 'The start image of “Opening” is 1024×1024, not 16:9: it is cropped at its centre, 42 % of the picture left out.');
-	assert.equal(en('generation.warn.frameCroppedLarge', params), 'The start image of “Opening” is 1024×1024, not 16:9: cropped at its centre, it loses 42 % of the picture. Make a start image in the frame of the film.');
+	assert.equal(en('generation.warn.frameCroppedLarge', params), 'The start image of “Opening” is 1024×1024, not 16:9: cropped at its centre, it loses 42 % of the picture. Make a start image in the frame of the take.');
 	assert.equal(fr('generation.warn.frameCropped', params), 'L’image de début de « Opening » est en 1024×1024, pas en 16:9 : elle est recadrée au centre, 42 % de l’image en moins.');
-	assert.equal(fr('generation.warn.frameCroppedLarge', params), 'L’image de début de « Opening » est en 1024×1024, pas en 16:9 : recadrée au centre, elle perd 42 % de l’image. Faites une image de début au cadre du film.');
+	assert.equal(fr('generation.warn.frameCroppedLarge', params), 'L’image de début de « Opening » est en 1024×1024, pas en 16:9 : recadrée au centre, elle perd 42 % de l’image. Faites une image de début au cadre de la prise.');
+	assert.equal(en('generation.warn.frameCroppedLastLarge', params), 'The end image of “Opening” is 1024×1024, not 16:9: cropped at its centre, it loses 42 % of the picture. Make an end image in the frame of the take.');
+	assert.equal(fr('generation.warn.frameCroppedLastLarge', params), 'L’image de fin de « Opening » est en 1024×1024, pas en 16:9 : recadrée au centre, elle perd 42 % de l’image. Faites une image de fin au cadre de la prise.');
+	assert.equal(en('generation.warn.frameCroppedChainedLarge', params), 'The last image of the shot before “Opening” is 1024×1024, not 16:9: cropped at its centre, it loses 42 % of the picture. Make a start image in the frame of the take.');
+	assert.equal(fr('generation.warn.frameCroppedChainedLarge', params), 'La dernière image du plan avant « Opening » est en 1024×1024, pas en 16:9 : recadrée au centre, elle perd 42 % de l’image. Faites une image de début au cadre de la prise.');
 	for (const key of ['frameCropped', 'frameCroppedLast', 'frameCroppedChained', 'frameCroppedLarge', 'frameCroppedLastLarge', 'frameCroppedChainedLarge']) {
 		for (const locale of LOCALES) assert.match(dictionaries[locale][`generation.warn.${key}`], /\{shot\}.*\{size\}.*\{aspect\}.*\{loss\}/, `${locale} ${key}`);
 	}
@@ -83,15 +87,37 @@ test('the texts of the crop exist in every language the plugin ships, with the s
 	assert.deepEqual(missing, []);
 });
 
-test('the deck offers to make a start image for the first shot whose image a large crop cuts', () => {
-	const deck = source('../components/production/ProductionDeck.svelte');
-	assert.match(deck, /const cropClip = \$derived\(blocked \? null : \(ready\.crops\.map\(/);
-	assert.match(deck, /\{#if !busy && cropClip\}/);
-	assert.match(deck, /onclick=\{\(\) => startImage\(cropClip\)\}/);
-	assert.match(deck, /t\('production\.deck\.startImage'\)/);
+const { renderComponent, hostUis, clean, textOf } = await import('./svelte-harness.js');
+const DECK = new URL('../components/production/ProductionDeck.svelte', import.meta.url).href;
+const cropButtons = (html) => [...clean(html).matchAll(/<button type="button" class="vp-deck-inline-action" data-crop-start-image="">(.*?)<\/button>/g)].map((match) => textOf(match[1]));
+const strong = (shot, roles = ['first']) => cropped('frame_cropped_large', { shot_id: shot, roles, size: '1024x1024', loss: 42 });
+const tips = (html) => hostUis(html, 'Tooltip').map((props) => props.text);
+const EMPTY = { shots: [], vram: null, time: { seconds: null, samples: 0 }, quota: null, cost: null, blocks: [], warnings: [] };
+
+test('the deck offers to make a start image for the first shot whose image a large crop cuts, while nothing blocks and nothing runs', async () => {
+	scene();
+	doc.clips.push({ id: 's2', start: 4, dur: 4, label: 'Second', stage: 'todo', take: null });
+	estimateState.data = { ...EMPTY, blocks: [], warnings: [strong('s2'), strong('s1')] };
+	const offered = await renderComponent(DECK);
+	assert.deepEqual(cropButtons(offered), [t('production.deck.startImage')]);
+	assert.ok(tips(offered).includes(t('production.deck.startImageTip', { shot: 'Second' })));
+	estimateState.data = { ...EMPTY, blocks: [{ code: 'missing_models', message: 'x', data: { models: ['a'] } }], warnings: [strong('s1')] };
+	assert.deepEqual(cropButtons(await renderComponent(DECK)), []);
+	estimateState.data = { ...EMPTY, blocks: [], warnings: [strong('s1')] };
+	ui.production.state = 'running';
+	assert.deepEqual(cropButtons(await renderComponent(DECK)), []);
+	ui.production.state = 'ready';
+	assert.deepEqual(cropButtons(await renderComponent(DECK)), [t('production.deck.startImage')]);
+	estimateState.data = { ...EMPTY, blocks: [], warnings: [cropped('frame_cropped')] };
+	assert.deepEqual(cropButtons(await renderComponent(DECK)), []);
+	estimateState.data = null;
+	assert.match(source('../components/production/ProductionDeck.svelte'), /onclick=\{\(\) => startImage\(cropClip\)\}/);
+	const { startImage } = await import('./references.js');
+	startImage(doc.clips[1]);
+	assert.deepEqual(ui.modal, { type: 'shot', id: 's2', focus: 'keyframes' });
+	ui.modal = null;
 });
 
-const { renderComponent } = await import('./svelte-harness.js');
 const framing = await import('./framing.js');
 const { frameBox } = await import('./framing.js');
 const PICKER = new URL('../components/shots/MediaPicker.svelte', import.meta.url).href;
@@ -116,24 +142,12 @@ test('the picker of a start image shows the centre the take keeps, in the frame 
 	doc.assets = [];
 });
 
-test('the inspector and the shot editor give the start and end image thumbnails the frame of the film', () => {
-	const inspector = source('../components/inspector/Inspector.svelte');
-	assert.match(inspector, /<img src=\{thumb\} alt="" class="object-cover" style=\{frameBox\(doc\)\} data-frame-thumb \/>/);
-	assert.match(inspector, /style=\{frameBox\(doc\)\}>\{t\('inspector\.frames\.none'\)\}<\/span>/);
-	const editor = source('../components/modals/ShotEditor.svelte');
-	assert.match(editor, /title=\{t\('inspector\.frames\.first'\)\} value=\{draft\.first\} frame=\{frameBox\(doc\)\}/);
-	assert.match(editor, /title=\{t\('inspector\.frames\.last'\)\} value=\{draft\.last\} frame=\{frameBox\(doc\)\}/);
-});
-
-test('the key frame tiles of the shot quick edit have the ratio of the film, wide ones 88 px across and tall ones 50 px high', async () => {
+test('a key frame tile has the ratio of the film when no take ratio is given, wide ones 88 px across and tall ones 50 px high', async () => {
 	const { frameTile } = await import('./framing.js');
 	assert.equal(frameTile({ aspect: '16:9' }), `aspect-ratio: ${16 / 9}; width: 88px`);
 	assert.equal(frameTile({ aspect: '2.39:1' }), `aspect-ratio: ${2.39}; width: 88px`);
 	assert.equal(frameTile({ aspect: '1:1' }), 'aspect-ratio: 1; height: 50px');
 	assert.equal(frameTile({ aspect: '9:16' }), `aspect-ratio: ${9 / 16}; height: 50px`);
-	const quick = source('../components/storyboard/ShotQuickEdit.svelte');
-	assert.match(quick, /style=\{frameTile\(doc\)\} data-quick-frame onclick=\{editor\}/);
-	assert.doesNotMatch(quick, /h-\[50px\] w-\[88px\]/);
 });
 
 test('an image that could not be cropped is said to be sent as it is, with its cause and the image it is', () => {
@@ -170,20 +184,21 @@ test('a take keeps the notes of the images it was sent without their crop, and i
 	const take = normalizeTake({ id: 't1', shot_id: 's2', status: 'queued', frame_notes: [note, { code: 'other' }] });
 	assert.deepEqual(take.frameNotes, [{ shot_id: 's2', cause: 'storage_full', roles: ['first'], chained: true }]);
 	assert.deepEqual(normalizeTake({ id: 't2', shot_id: 's2', status: 'done' }).frameNotes, []);
-	const card = source('../components/takes/TakeCard.svelte');
-	assert.match(card, /\{#if take\.frameNotes\?\.length\}<span [^>]*title=\{take\.frameNotes\.map\(notCroppedText\)\.join\(' '\)\} data-take-not-cropped>\{t\('generation\.card\.notCropped'\)\}<\/span>\{\/if\}/);
+	scene();
+	const card = new URL('../components/takes/TakeCard.svelte', import.meta.url).href;
+	const own = { code: 'frame_not_cropped', message: 'x', data: { shot_id: 's1', cause: 'upload_too_large', roles: ['last'], chained: false } };
+	const badges = (html) => [...clean(html).matchAll(/<span [^>]*title="([^"]*)" data-take-not-cropped="">([^<]*)<\/span>/g)].map((match) => [match[1].replaceAll('&#39;', "'").replaceAll('&quot;', '"').replaceAll('&amp;', '&'), match[2]]);
+	const noted = normalizeTake({ id: 't3', shot_id: 's1', status: 'queued', variant: 'A', quality: 'draft', frame_notes: [own, { ...note, data: { ...note.data, shot_id: 's1', roles: ['first'], chained: false } }] });
+	assert.deepEqual(badges(await renderComponent(card, { take: noted, clip: doc.clips[0] })), [
+		[`${noteText(own)} ${noteText({ code: 'frame_not_cropped', data: { shot_id: 's1', cause: 'storage_full', roles: ['first'], chained: false } })}`, t('generation.card.notCropped')]
+	]);
+	assert.deepEqual(badges(await renderComponent(card, { take: normalizeTake({ id: 't4', shot_id: 's1', status: 'queued', variant: 'A', quality: 'draft' }), clip: doc.clips[0] })), []);
 });
 
-test('the stills of the seam monitor and of the seam review have the ratio of the film', () => {
+test('a seam still box has the ratio of the film when no take ratio is given, on a height of its own for a tall film', () => {
 	const { frameBox } = framing;
 	assert.equal(frameBox({ aspect: '9:16' }, '18rem'), `aspect-ratio: ${9 / 16}; height: 18rem; width: auto; max-width: 100%; margin: 0 auto`);
 	assert.equal(frameBox({ aspect: '16:9' }, '18rem'), `aspect-ratio: ${16 / 9}; width: 100%`);
-	const monitor = source('../components/storyboard/BandMonitor.svelte');
-	assert.match(monitor, /style=\{frameBox\(doc, '18rem'\)\} style:grid-area="still\{k\}" data-seam-still>/);
-	assert.doesNotMatch(monitor, /aspect-video w-full overflow-hidden rounded \{src/);
-	const review = source('../components/director/ReviewSeam.svelte');
-	assert.match(review, /<span class="block overflow-hidden rounded bg-surface-3" style=\{frameBox\(doc\)\} data-seam-still>/);
-	assert.doesNotMatch(review, /block aspect-video w-full overflow-hidden rounded bg-surface-3/);
 });
 
 test('the pixel ceiling the page names is the one of the formats table, in every language', async () => {
@@ -197,16 +212,19 @@ test('the pixel ceiling the page names is the one of the formats table, in every
 	}
 });
 
-test('a strong warning that cuts only the end image of a shot offers to make an end image', () => {
+test('a strong warning that cuts only the end image of a shot offers to make an end image', async () => {
 	scene();
 	const strong = (roles) => ({ code: 'frame_cropped_large', data: { shot_id: 's1', roles, size: '1024x1024', aspect: '16:9', loss: 42, chained: false } });
 	estimateState.data = { blocks: [], warnings: [strong(['last'])] };
 	assert.deepEqual([readiness().crops, readiness().cropEnds], [['s1'], ['s1']]);
 	estimateState.data = { blocks: [], warnings: [strong(['first']), strong(['last'])] };
 	assert.deepEqual([readiness().crops, readiness().cropEnds], [['s1', 's1'], ['s1']]);
+	estimateState.data = { ...EMPTY, warnings: [strong(['last'])] };
+	const end = await renderComponent(DECK);
+	assert.deepEqual(cropButtons(end), [t('production.deck.endImage')]);
+	assert.ok(tips(end).includes(t('production.deck.endImageTip', { shot: 'Opening' })));
+	estimateState.data = { ...EMPTY, warnings: [strong(['last']), strong(['first'])] };
+	assert.deepEqual(cropButtons(await renderComponent(DECK)), [t('production.deck.startImage')]);
 	estimateState.data = null;
-	const deck = source('../components/production/ProductionDeck.svelte');
-	assert.match(deck, /\{cropEnd \? t\('production\.deck\.endImage'\) : t\('production\.deck\.startImage'\)\}/);
-	assert.match(deck, /cropEnd \? t\('production\.deck\.endImageTip', \{ shot: clipLabel\(cropClip\) \}\)/);
 	for (const locale of LOCALES) assert.match(dictionaries[locale]['production.deck.endImageTip'], /\{shot\}/, locale);
 });

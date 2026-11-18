@@ -95,10 +95,8 @@ def test_a_start_image_cropped_by_video_producer_reaches_minimax_h3_as_its_ancho
     assert [Path(path) for path in paths] == [cropped]
     width, height = (int(side) for side in resolution.split("x"))
     with Image.open(paths[0]) as picture:
-        fitted = fit_keyframe_to_canvas(picture.convert("RGB"), height, width, is_geometry_anchor=True)
-    with Image.open(source) as square:
-        stretched = fit_keyframe_to_canvas(square.convert("RGB"), height, width, is_geometry_anchor=True)
+        sent = picture.convert("RGB")
+    fitted = fit_keyframe_to_canvas(sent, height, width, is_geometry_anchor=True)
     assert fitted.size == (width, height)
+    assert fitted.tobytes() == sent.resize((width, height), Image.Resampling.LANCZOS).tobytes()
     assert _disc_ratio(fitted) == pytest.approx(1.0, abs=0.02)
-    if box is not None:
-        assert abs(_disc_ratio(stretched) - 1.0) > 0.3

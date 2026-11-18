@@ -2,7 +2,8 @@
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { formatNumber, t } from '../../i18n/index.svelte.js';
 	import { ui, doc, act, secs, shotNumber } from '../../lib/state.svelte.js';
-	import { takesOf, toggleCompare } from '../../lib/production.svelte.js';
+	import { takesOf, thumbRatio, toggleCompare } from '../../lib/production.svelte.js';
+	import { frameTile } from '../../lib/framing.js';
 	import { instructionOf } from '../../lib/bible.js';
 	import { missingWords } from '../../lib/director.js';
 	import { takeLabelOf } from '../../lib/labels.js';
@@ -52,8 +53,11 @@
 		});
 	}
 	const methodText = (card) => (card.kind === 'place' ? t('panels.director.pick.lookPlace') : card.method === 'face' ? t('panels.director.pick.lookFace', { seen: percent(card.seen) }) : card.seen === 0 ? t('panels.director.pick.lookNoFace') : '');
-	const endOf = (c) => seamImage(doc, c.id, 'last')?.src ?? clipThumb(c);
-	const startOf = (c) => seamImage(doc, c.id, 'first')?.src ?? clipThumb(c);
+	const sideOf = (c, kind) => {
+		const image = seamImage(doc, c.id, kind);
+		return image ? { src: image.src, image, shot: c } : { src: clipThumb(c), image: null, shot: c };
+	};
+	const own = $derived({ src: thumb, image: null, shot: clip });
 	const verdict = (i) => {
 		const sm = placed ? seam(i) : null;
 		if (!sm?.measured) return [];
@@ -62,8 +66,8 @@
 	const chainNote = $derived(chained ? { text: placed ? t('panels.director.pick.chainedPlaced', { next: shotNumber(next), shot: shotNumber(clip) }) : t('panels.director.pick.chained', { next: shotNumber(next), shot: shotNumber(clip) }), warn: !placed } : null);
 	const pairs = $derived(
 		[
-			previous ? { left: endOf(previous), right: thumb, title: `${shotNumber(previous)} → ${shotNumber(clip)}`, notes: verdict(index) } : null,
-			next ? { left: thumb, right: startOf(next), title: `${shotNumber(clip)} → ${shotNumber(next)}`, notes: [...verdict(index + 1), ...(chainNote ? [chainNote] : [])] } : null
+			previous ? { left: sideOf(previous, 'last'), right: own, title: `${shotNumber(previous)} → ${shotNumber(clip)}`, notes: verdict(index) } : null,
+			next ? { left: own, right: sideOf(next, 'first'), title: `${shotNumber(clip)} → ${shotNumber(next)}`, notes: [...verdict(index + 1), ...(chainNote ? [chainNote] : [])] } : null
 		].filter(Boolean)
 	);
 
@@ -158,8 +162,8 @@
 		<div class="vp-section-title">{placed ? t('panels.director.pick.seamsPlaced') : t('panels.director.pick.seams')}</div>
 		{#each pairs as pair (pair.title)}
 			<div class="flex items-start gap-2">
-				{#each [pair.left, pair.right] as src, k (k)}
-					<span class="block aspect-video w-16 shrink-0 overflow-hidden rounded bg-surface-3">{#if src}<img {src} alt="" class="h-full w-full object-cover" />{/if}</span>
+				{#each [pair.left, pair.right] as side, k (k)}
+					<span class="block shrink-0 overflow-hidden rounded bg-surface-3" style={frameTile(doc, 64, 36, side.image ? thumbRatio(side.shot.id, side.image) : undefined)} data-take-seam-still>{#if side.src}<img src={side.src} alt="" class="h-full w-full object-cover" />{/if}</span>
 				{/each}
 				<span class="min-w-0 flex-1 space-y-0.5 text-xs">
 					<span class="vp-tc block font-medium text-fg">{pair.title}</span>

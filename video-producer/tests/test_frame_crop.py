@@ -556,7 +556,7 @@ def test_a_file_in_a_format_the_core_does_not_read_is_neither_measured_nor_cropp
 
     found = asyncio.run(framefit.fit(core.users["user-1"], "uploads/print.png", {"kind": "library", "item_id": "lib-print"}, (26, 15), "print.png"))
 
-    assert framefit.picture_size(path) is None
+    assert framefit.picture(path) is None
     assert found is None and pictures.stored == []
 
 
@@ -693,7 +693,7 @@ def test_a_photo_that_declares_an_orientation_is_measured_and_cropped_upright(tm
     path = tmp_path / "turned.jpg"
     _turned(path, (400, 300))
 
-    size = framefit.picture_size(path)
+    size = framefit.picture(path)[:2]
     output = framefit.crop_file(path, framefit.crop_box(*size, (9, 16)), tmp_path, "turned.jpg")
 
     assert size == (300, 400)
@@ -780,7 +780,7 @@ def test_a_phone_photo_in_several_pictures_is_read_and_cropped_like_a_jpeg(tmp_p
     path = tmp_path / "phone.jpg"
     _disc((1024, 1024)).save(path, format="MPO", save_all=True, append_images=[_disc((1024, 1024), TEAL)])
 
-    output = framefit.crop_file(path, framefit.crop_box(*framefit.picture_size(path), (26, 15)), tmp_path, "phone.jpg")
+    output = framefit.crop_file(path, framefit.crop_box(*framefit.picture(path)[:2], (26, 15)), tmp_path, "phone.jpg")
 
     with Image.open(output) as image:
         assert (output.name, image.format, image.size) == ("phone-crop-1024x590.jpg", "JPEG", (1024, 590))

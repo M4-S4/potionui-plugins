@@ -38,7 +38,7 @@
 	import { clipFilter } from '../../lib/look.js';
 	import { assetThumb, clipThumb } from '../../lib/media.js';
 	import { stages, audioRoleLabel, frameRoleLabel } from '../../lib/catalog.js';
-	import { takesOf, promoteToFinal, findTake, shotActivity, engineLabel, soundBehaviorOf, shotDurationLimit, fitShot, setClipSpeed } from '../../lib/production.svelte.js';
+	import { takesOf, promoteToFinal, findTake, shotActivity, engineLabel, soundBehaviorOf, shotDurationLimit, fitShot, setClipSpeed, thumbRatio } from '../../lib/production.svelte.js';
 	import { SPEEDS, interpolatorChoice, pickInterpolator, shotCadence, speedOf } from '../../lib/cadence.js';
 	import { conformTakes, renditionStore } from '../../lib/renditions.svelte.js';
 	import { refMediaKind, refRoleLabel, refTypeLabel, typesOf } from '../../lib/references.js';
@@ -380,6 +380,7 @@
 							{#each [['first', t('inspector.frames.first')], ['last', t('inspector.frames.last')]] as [kind, title] (kind)}
 								{@const f = seamFrame(item.id, kind)}
 								{@const thumb = f ? assetThumb(asset(f.assetId)) : null}
+								{@const box = frameBox(doc, '7rem', thumbRatio(item.id, f ? asset(f.assetId) : null))}
 								<button
 									type="button"
 									class="overflow-hidden rounded-md border border-line-strong text-left transition-colors {f ? 'hover:border-line-hover' : ''} disabled:cursor-default"
@@ -387,9 +388,9 @@
 									onclick={() => f && select('frame', f.id)}
 								>
 									{#if thumb}
-										<img src={thumb} alt="" class="object-cover" style={frameBox(doc)} data-frame-thumb />
+										<img src={thumb} alt="" class="object-cover" style={box} data-frame-thumb />
 									{:else}
-										<span class="flex items-center justify-center bg-surface-3 text-2xs text-fg-subtle" style={frameBox(doc)}>{t('inspector.frames.none')}</span>
+										<span class="flex items-center justify-center bg-surface-3 text-2xs text-fg-subtle" style={box}>{t('inspector.frames.none')}</span>
 									{/if}
 									<span class="block truncate px-1.5 py-0.5 text-2xs text-fg-muted">{title}</span>
 								</button>

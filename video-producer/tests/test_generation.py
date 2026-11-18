@@ -31,14 +31,15 @@ def _tick():
     return asyncio.run(tracker.Tracker().tick())
 
 
-def _slow_sound(monkeypatch):
+def _meet_in_sound(monkeypatch, parties):
     sound = generation.with_sound
+    met = {}
 
-    async def slow(*args):
-        await asyncio.sleep(0.01)
+    async def meet(*args):
+        await asyncio.wait_for(met.setdefault("barrier", asyncio.Barrier(parties)).wait(), 5)
         return await sound(*args)
 
-    monkeypatch.setattr(generation, "with_sound", slow)
+    monkeypatch.setattr(generation, "with_sound", meet)
 
 
 async def _together(*requests):
@@ -892,7 +893,7 @@ def test_two_requests_whose_estimates_both_fit_the_quota_cannot_both_reserve_it(
     order = Order(shots=["s1"], quality="draft", variants=1, preset_id=presets.WAN)
     evaluations = [asyncio.run(estimate.evaluate(user, user, project["doc"], order)) for _ in range(2)]
     assert [(evaluation.blocked, evaluation.payload["quota"]["remaining"]) for evaluation in evaluations] == [(False, 10.0), (False, 10.0)]
-    _slow_sound(monkeypatch)
+    _meet_in_sound(monkeypatch, len(evaluations))
 
     made, refused = asyncio.run(_together(*(generation.start(user, project, evaluation) for evaluation in evaluations)))
 
@@ -913,7 +914,7 @@ def test_two_finals_that_each_fit_the_quota_cannot_both_reserve_it(core, make_pr
     user = core.users["user-1"]
     monkeypatch.setattr(estimate, "take_minutes", lambda seconds, ratio: 8.0)
     core.meter(10.0)
-    _slow_sound(monkeypatch)
+    _meet_in_sound(monkeypatch, len(sources))
 
     made, refused = asyncio.run(_together(*(generation.final(user, project, source, "render", "fhd1080") for source in sources)))
 
@@ -922,9 +923,35 @@ def test_two_finals_that_each_fit_the_quota_cannot_both_reserve_it(core, make_pr
     assert len([take for take in takes.list_takes(project["id"]) if take["quality"] == "final"]) == 1
 
 
-def test_the_quota_is_read_and_reserved_by_one_request_at_a_time_across_threads(core):
+def test_the_quota_is_read_and_reserved_by_one_request_at_a_time_across_threads(core, monkeypatch):
     user = core.users["user-1"]
-    core.meter(10.0, pause=0.05)
+    state = threading.Condition()
+    seen = {"read": 0, "blocked": 0}
+    lock_of = generation._quota_lock
+
+    class Watched:
+        def __init__(self, lock):
+            self.lock = lock
+
+        def __enter__(self):
+            if self.lock.acquire(blocking=False):
+                return True
+            with state:
+                seen["blocked"] += 1
+                state.notify_all()
+            return self.lock.acquire()
+
+        def __exit__(self, *exc):
+            self.lock.release()
+
+    def hold():
+        with state:
+            seen["read"] += 1
+            state.notify_all()
+            assert state.wait_for(lambda: seen["read"] == 2 or seen["blocked"] == 1, timeout=5)
+
+    monkeypatch.setattr(generation, "_quota_lock", lambda user_id: Watched(lock_of(user_id)))
+    core.meter(10.0, hold=hold)
     outcomes = []
 
     def request(number):

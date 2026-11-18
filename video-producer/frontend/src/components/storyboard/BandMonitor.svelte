@@ -2,7 +2,7 @@
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { t } from '../../i18n/index.svelte.js';
 	import { ui, doc, clipLabel, shotNumber } from '../../lib/state.svelte.js';
-	import { takesOf } from '../../lib/production.svelte.js';
+	import { takesOf, thumbRatio } from '../../lib/production.svelte.js';
 	import { takeLabelOf } from '../../lib/labels.js';
 	import { seam } from '../../lib/continuity.svelte.js';
 	import { seamPick } from '../../lib/continuity.js';
@@ -43,6 +43,8 @@
 	const startSrc = (c) => (c ? (seamImage(doc, c.id, 'first')?.src ?? clipThumb(c)) : null);
 	const lastSrc = $derived(comparing ? (pick?.last?.src ?? endSrc(prev)) : null);
 	const firstSrc = $derived(comparing ? (clipThumb(clip) ?? pick?.first?.src ?? startSrc(clip)) : null);
+	const lastImage = $derived(comparing && pick?.last?.src == null ? seamImage(doc, prev.id, 'last') : null);
+	const firstImage = $derived(comparing && clipThumb(clip) == null && pick?.first?.src == null ? seamImage(doc, clip.id, 'first') : null);
 	const roomy = $derived(w >= 1150);
 	const beside = $derived(roomy || grading.some(Boolean));
 	const gradeColumn = $derived(roomy ? '240px' : 'minmax(180px, 200px)');
@@ -64,9 +66,9 @@
 					style:grid-template-columns={beside ? `${gradeColumn} minmax(0, 300px) minmax(0, 300px) ${gradeColumn}` : 'repeat(2, minmax(0, 300px))'}
 					style:grid-template-areas={beside ? '"grade0 still0 still1 grade1" "grade0 seam seam grade1"' : '"still0 still1" "grade0 grade1" "seam seam"'}
 				>
-					{#each [[lastSrc, t('storyboard.band.endOf', { n: shotNumberAt(index - 1) }), prev, index - 1], [firstSrc, t('storyboard.band.startOf', { n: shotNumberAt(index) }), clip, index]] as [src, caption, shot, at], k (caption)}
+					{#each [[lastSrc, t('storyboard.band.endOf', { n: shotNumberAt(index - 1) }), prev, index - 1, lastImage], [firstSrc, t('storyboard.band.startOf', { n: shotNumberAt(index) }), clip, index, firstImage]] as [src, caption, shot, at, image], k (caption)}
 						{@const look = lutOf(shot)}
-						<div class="relative overflow-hidden rounded {src ? 'bg-black' : 'bg-surface-3 bg-[repeating-linear-gradient(135deg,rgb(var(--line-strong))_0_1px,transparent_1px_10px)]'}" style={frameBox(doc, '18rem')} style:grid-area="still{k}" data-seam-still>
+						<div class="relative overflow-hidden rounded {src ? 'bg-black' : 'bg-surface-3 bg-[repeating-linear-gradient(135deg,rgb(var(--line-strong))_0_1px,transparent_1px_10px)]'}" style={frameBox(doc, '18rem', image ? thumbRatio(shot.id, image) : undefined)} style:grid-area="still{k}" data-seam-still>
 							{#if src}<img bind:this={stills[k]} {src} alt="" class="h-full w-full object-cover" style:filter={clipFilter(shot)} />{/if}
 							{#if src && look && stills[k]}<MatchCanvas source={stills[k]} lut={look} filter={clipFilter(shot)} cover />{/if}
 							<span class="absolute bottom-1.5 left-1.5 rounded bg-black/65 px-1.5 text-2xs text-white">{caption}</span>
