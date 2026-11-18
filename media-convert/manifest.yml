@@ -207,3 +207,65 @@ media_tools:
         label: "Keep metadata"
         default: true
         description: "Keeps the title and the other tags of the video."
+
+  - id: "media-convert.animation"
+    label: "Make an animation"
+    description: "Save a part of the video, 30 seconds at most, as a looping GIF or animated WebP"
+    icon: "play"
+    accepts: [video]
+    produces: image
+    cardinality: one_to_one
+    scopes: [library, history]
+    python: "tools/animation.py:MakeAnimation"
+    params:
+      - name: format
+        type: select
+        label: "Format"
+        default: gif
+        description: "A GIF plays everywhere; an animated WebP is two to three times lighter."
+        options:
+          - { label: "GIF", value: gif }
+          - { label: "Animated WebP", value: webp }
+      - name: start
+        type: float
+        label: "Start"
+        default: 0
+        min: 0
+        step: 0.1
+        unit: "s"
+      - name: length
+        type: float
+        label: "Length"
+        default: 10
+        min: 0.5
+        max: 30
+        step: 0.5
+        unit: "s"
+        description: "Stops at the end of the video if it comes first."
+      - name: max_side
+        type: select
+        label: "Largest side"
+        default: 480
+        description: "A smaller video keeps its size."
+        options:
+          - { label: "640 px", value: 640 }
+          - { label: "480 px", value: 480 }
+          - { label: "320 px", value: 320 }
+      - name: frame_rate
+        type: select
+        label: "Frame rate"
+        default: full
+        description: "Fewer frames make a lighter file. Each step keeps every second or third frame, so the motion stays even."
+        options:
+          - { label: "Like the video, 25 per second at most", value: full }
+          - { label: "Half", value: half }
+          - { label: "A third", value: third }
+      - name: quality
+        type: select
+        label: "Quality"
+        default: balanced
+        description: "Small files lose more detail."
+        options:
+          - { label: "High", value: high }
+          - { label: "Balanced", value: balanced }
+          - { label: "Small", value: small }

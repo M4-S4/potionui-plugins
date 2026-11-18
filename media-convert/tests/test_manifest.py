@@ -6,19 +6,22 @@ from src.plugin_api.media import upload_formats
 from src.plugin_api.media_tools import InvalidToolParams, MediaTool
 
 import tools
-from tools import common
+from tools import animation, common
 
 from . import conftest
 from .conftest import MANIFEST, PLUGIN_ROOT, TOOLS, make_video, need_encoders, params_for
 
-ICONS_ON_BOTH_CORES = {"image", "film", "audio", "editor-music"}
+ICONS_ON_BOTH_CORES = {"image", "film", "audio", "editor-music", "play"}
 
 SUFFIXES = {
     "media-convert.image": ("image", common.IMAGE_FORMATS),
     "media-convert.video": ("video", common.VIDEO_FORMATS),
     "media-convert.audio": ("audio", common.AUDIO_FORMATS),
     "media-convert.extract-audio": ("audio", common.AUDIO_FORMATS),
+    "media-convert.animation": ("image", animation.ANIMATION_FORMATS),
 }
+ALL_TOOLS = sorted(SUFFIXES)
+QUALITY_TOOLS = sorted(SUFFIXES)
 
 
 def options(tool_id, name):
@@ -34,8 +37,8 @@ def test_the_manifest_names_the_plugin_and_its_version():
     assert "pages" not in MANIFEST and "api" not in MANIFEST
 
 
-def test_there_are_four_python_tools_without_a_component():
-    assert sorted(TOOLS) == sorted(SUFFIXES)
+def test_there_are_five_python_tools_without_a_component():
+    assert sorted(TOOLS) == ALL_TOOLS
     for entry in TOOLS.values():
         assert entry["python"] and "component" not in entry
         assert entry["cardinality"] == "one_to_one"
@@ -44,11 +47,16 @@ def test_there_are_four_python_tools_without_a_component():
 def test_no_tool_offers_replace_so_the_library_name_follows_the_new_format():
     for tool_id, (kind, _) in SUFFIXES.items():
         assert TOOLS[tool_id]["produces"] == kind
+    assert all(entry["produces"] != "same" for entry in TOOLS.values())
 
 
 def test_tools_show_in_the_library_and_the_history_only():
     for entry in TOOLS.values():
         assert entry["scopes"] == ["library", "history"]
+
+
+def test_the_new_tools_take_videos():
+    assert TOOLS["media-convert.animation"]["accepts"] == ["video"]
 
 
 def test_extracting_the_sound_needs_a_video_with_sound():
@@ -65,7 +73,7 @@ def test_every_output_format_is_one_the_library_accepts(tool_id):
         assert suffix in accepted
 
 
-@pytest.mark.parametrize("tool_id", sorted(SUFFIXES))
+@pytest.mark.parametrize("tool_id", ALL_TOOLS)
 def test_every_tool_class_loads_and_is_a_media_tool(tool_id):
     path, _, name = TOOLS[tool_id]["python"].partition(":")
     assert (PLUGIN_ROOT / path).is_file()
@@ -73,7 +81,7 @@ def test_every_tool_class_loads_and_is_a_media_tool(tool_id):
     assert issubclass(getattr(module, name), MediaTool)
 
 
-@pytest.mark.parametrize("tool_id", sorted(SUFFIXES))
+@pytest.mark.parametrize("tool_id", QUALITY_TOOLS)
 def test_the_quality_has_three_steps_and_no_number(tool_id):
     assert options(tool_id, "quality") == list(common.QUALITIES)
     assert all(not isinstance(value, (int, float)) for value in options(tool_id, "quality"))
@@ -88,6 +96,9 @@ def test_defaults_validate_through_the_core_rules():
     }
     assert params_for("media-convert.audio") == {"format": "mp3", "quality": "balanced", "keep_metadata": True}
     assert params_for("media-convert.extract-audio") == {"format": "m4a", "quality": "balanced", "keep_metadata": True}
+    assert params_for("media-convert.animation") == {
+        "format": "gif", "start": 0, "length": 10, "max_side": 480, "frame_rate": "full", "quality": "balanced",
+    }
 
 
 def test_lossless_formats_hide_the_quality_and_jpeg_alone_shows_the_background():
@@ -105,6 +116,17 @@ def test_the_largest_side_is_a_fixed_list_and_never_free_text():
             params_for(tool_id, max_side=777)
         with pytest.raises(InvalidToolParams):
             params_for(tool_id, format="gif")
+
+
+def test_the_animation_form_matches_the_code():
+    assert options("media-convert.animation", "max_side") == list(animation.ANIMATION_SIDES)
+    assert options("media-convert.animation", "frame_rate") == list(animation.RATE_STEPS)
+    length = next(p for p in TOOLS["media-convert.animation"]["params"] if p["name"] == "length")
+    assert (length["min"], length["max"], length["default"]) == (
+        animation.MIN_ANIMATION_SECONDS, animation.MAX_ANIMATION_SECONDS, animation.DEFAULT_ANIMATION_SECONDS,
+    )
+    with pytest.raises(InvalidToolParams):
+        params_for("media-convert.animation", start=-1)
 
 
 def test_the_settings_match_the_code_defaults():

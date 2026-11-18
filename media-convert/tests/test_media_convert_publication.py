@@ -111,15 +111,18 @@ class Library:
         return [path for path in found if path and (self.uploads / path).is_file()]
 
 
-def test_the_four_tools_register_from_the_manifest_for_the_library_and_the_history(library):
-    ours = {"media-convert.image", "media-convert.video", "media-convert.audio", "media-convert.extract-audio"}
+def test_the_five_tools_register_from_the_manifest_for_the_library_and_the_history(library):
+    ours = {
+        "media-convert.image", "media-convert.video", "media-convert.audio", "media-convert.extract-audio",
+        "media-convert.animation",
+    }
     for scope in ("library", "history"):
         listed = {tool.id: tool for tool in library.service.catalog(USER, scope=scope) if tool.source == "media-convert"}
         assert set(listed) == ours
         assert all(tool.runnable for tool in listed.values())
     assert not [tool for tool in library.service.catalog(USER, scope="field") if tool.source == "media-convert"]
     for_videos = {tool.id for tool in library.service.catalog(USER, kind="video", scope="library") if tool.source == "media-convert"}
-    assert for_videos == {"media-convert.video", "media-convert.extract-audio"}
+    assert for_videos == {"media-convert.video", "media-convert.extract-audio", "media-convert.animation"}
 
 
 def test_a_png_published_as_webp_keeps_its_name_with_the_new_extension(library, source_dir):
@@ -303,6 +306,34 @@ def test_a_replace_asked_outside_the_window_keeps_the_old_name_over_the_new_cont
     row = library.repo.get_by_id(item.id, USER)
     assert row.original_filename == "Chat.png"
     assert row.filename.endswith(".webp") and row.mime_type == "image/webp"
+
+
+def test_a_video_becomes_a_looping_gif_item_with_a_thumbnail(library, source_dir):
+    need_encoders("libx264", "aac", "gif")
+    item = library.add(make_video(source_dir / "a.mp4", seconds=2.0, size=(64, 48)), "Holiday.mp4", "video")
+
+    result = library.run("media-convert.animation", {"length": 1}, item)
+
+    assert result.ok, result.error
+    [made] = result.items
+    assert made.original_filename == "Holiday.gif"
+    assert made.media_type == "image" and made.mime_type == "image/gif"
+    assert library.thumbnails(made)
+    with Image.open(library.file(made)) as image:
+        assert image.format == "GIF" and image.n_frames > 1 and image.info.get("loop") == 0
+
+
+def test_a_video_becomes_an_animated_webp_item(library, source_dir):
+    need_encoders("libx264", "aac", "libwebp_anim")
+    item = library.add(make_video(source_dir / "a.mp4", seconds=2.0, size=(64, 48)), "Holiday.mp4", "video")
+
+    result = library.run("media-convert.animation", {"format": "webp", "length": 1}, item)
+
+    assert result.ok, result.error
+    [made] = result.items
+    assert made.original_filename == "Holiday.webp" and made.mime_type == "image/webp"
+    with Image.open(library.file(made)) as image:
+        assert image.format == "WEBP" and image.n_frames > 1
 
 
 def plugin_constants(library):
