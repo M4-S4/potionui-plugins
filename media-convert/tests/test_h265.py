@@ -236,9 +236,12 @@ def test_a_video_that_would_take_too_long_is_refused_after_the_sample(ctx, sourc
     assert [item.name for item in ctx.scratch_dir.iterdir()] == []
 
 
-def test_the_shortcut_counts_the_frames_the_file_holds_and_the_cores_of_the_server(monkeypatch, server_settings):
+def test_the_shortcut_counts_the_frames_the_file_holds_and_the_cores_of_the_server(tmp_path, monkeypatch, server_settings):
     server_settings["ffmpeg_threads"] = 16
+    monkeypatch.setattr(video, "CPU_MAX", tmp_path / "none")
+    monkeypatch.setattr(video, "CFS_QUOTA", tmp_path / "none")
     monkeypatch.setattr(video.os, "cpu_count", lambda: 2)
+    monkeypatch.setattr(video.os, "sched_getaffinity", lambda pid: set(range(24)), raising=False)
     limit = video.H265_PIXELS_PER_THREAD_SECOND * 2 * 60.0
 
     assert sampled(monkeypatch, [0.0] * 6, frames=int(limit // (1920 * 1080))).calls == []
@@ -269,6 +272,7 @@ def test_the_older_processor_limit_files_are_read_too(tmp_path, monkeypatch, quo
     monkeypatch.setattr(video, "CFS_QUOTA", tmp_path / "quota")
     monkeypatch.setattr(video, "CFS_PERIOD", tmp_path / "period")
     monkeypatch.setattr(video.os, "cpu_count", lambda: 24)
+    monkeypatch.setattr(video.os, "sched_getaffinity", lambda pid: set(range(24)), raising=False)
 
     assert video.server_cores() == cores
 
