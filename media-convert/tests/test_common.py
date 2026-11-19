@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 import pytest
@@ -193,3 +194,19 @@ def test_counting_frames_stops_ffprobe_when_the_cancel_check_fails(tmp_path, mon
         count_frames(tmp_path / "clip.mp4", 0, broken)
 
     assert made[0].killed
+
+
+def test_a_working_file_that_cannot_be_removed_is_told_in_the_log_and_raises_nothing(tmp_path, held_scratch, caplog):
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    held = scratch / "out-001.mp4"
+    held.write_bytes(b"held")
+
+    with caplog.at_level(logging.WARNING, logger="plugins.media-convert"):
+        common.discard(held)
+        common.discard(scratch / "gone.mp4")
+
+    assert held.exists() and held_scratch == ["out-001.mp4"]
+    found = [record for record in caplog.records if record.name == "plugins.media-convert"]
+    assert [record.getMessage() for record in found] == ["Media Converter could not remove a working file: PermissionError"]
+    assert found[0].levelno == logging.WARNING

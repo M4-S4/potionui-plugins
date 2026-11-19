@@ -11,6 +11,7 @@ from .common import (
     MEGABYTE,
     check_duration,
     count_frames,
+    discard,
     fit,
     guard,
     input_args,
@@ -267,10 +268,10 @@ class LightenVideo(MediaTool):
         finally:
             release(room)
         if written >= target:
-            out.unlink(missing_ok=True)
+            discard(out)
             return None
         if written >= room.size:
-            out.unlink(missing_ok=True)
+            discard(out)
             lighten_refuse(room, written)
         return ctx.probe(out, "video")
 
@@ -297,7 +298,7 @@ class LightenVideo(MediaTool):
                 budget = target * (1 - MARGIN)
                 cut = math.ceil((written - budget) * 8 / seconds / 1000) + 1
                 retry = Plan(max(SMALLEST_VIDEO_KBPS, chosen.video_kbps - cut), chosen.audio_kbps, chosen.width, chosen.height)
-                out.unlink(missing_ok=True)
+                discard(out)
                 out = ctx.new_path(".mp4")
                 outputs.append(out)
                 self.second_pass(media, streams, track, keep, retry, prefix, room, out, ctx.scoped(0.9, 1.0))
@@ -312,19 +313,19 @@ class LightenVideo(MediaTool):
                 lighten_refuse(room, written)
         except BaseException:
             for path in outputs:
-                path.unlink(missing_ok=True)
+                discard(path)
             raise
         finally:
-            for path in scratch_files(prefix):
-                path.unlink(missing_ok=True)
             release(room)
+            for path in scratch_files(prefix):
+                discard(path)
         made = read_streams(out)
         if streams.video.duration:
             shown, expected = (made.video.duration if made.video else None) or made.duration, streams.video.duration
         else:
             shown, expected = made.duration, seconds
         if shown is None or shown < expected - LENGTH_TOLERANCE:
-            out.unlink(missing_ok=True)
+            discard(out)
             raise ToolFailed(NOT_AS_STATED)
         return ctx.probe(out, "video")
 

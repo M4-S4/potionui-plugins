@@ -8,6 +8,7 @@ from src.plugin_api.media_tools import MediaTool, ToolFailed
 from .common import (
     MAX_VIDEO_PIXELS,
     MEGABYTE,
+    discard,
     fit,
     guard,
     input_args,
@@ -164,7 +165,7 @@ class MakeAnimation(MediaTool):
             ],
             duration=length,
         )
-        palette.unlink(missing_ok=True)
+        discard(palette)
         return left
 
     def webp(self, ctx, source, index, picture_filter, level, length, room, out):

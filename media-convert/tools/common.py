@@ -175,6 +175,13 @@ def scratch_bytes(folder: Path) -> int:
     return total
 
 
+def discard(path: Path) -> None:
+    try:
+        Path(path).unlink(missing_ok=True)
+    except OSError as error:
+        logger.warning("Media Converter could not remove a working file: %s", type(error).__name__)
+
+
 def storage_limit(user_id: Optional[str], kind: str):
     if not user_id:
         return None

@@ -1,3 +1,4 @@
+import logging
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
@@ -790,3 +791,119 @@ def test_stream_lengths_are_read_from_the_container_tags_too(source_dir):
 
     assert streams.video.duration == pytest.approx(2.0, abs=0.05)
     assert streams.audio[0].duration == pytest.approx(4.0, abs=0.05)
+
+
+def test_a_held_file_changes_no_lightened_result(ctx, source_dir, small_unit, monkeypatch, no_grants, held_scratch):
+    path = busy_video(source_dir / "busy.mp4")
+    inflated(monkeypatch, 1.4)
+
+    result = lightened(ctx, path, target=16)
+
+    assert len(ctx.commands) == 3
+    assert result.path.name == Path(ctx.commands[-1][-1]).name
+    assert result.path.stat().st_size < 16 * UNIT
+    assert Path(ctx.commands[1][-1]).name in held_scratch and any(name.startswith("pass-") for name in held_scratch)
+    assert not no_grants
+
+
+def test_a_held_copy_is_still_encoded_instead(ctx, source_dir, no_grants, held_scratch):
+    path = make_video(source_dir / "clip.mp4", seconds=2.0, size=(64, 48), extra=("-pix_fmt", "yuv420p"))
+
+    def after(args):
+        if "-c" in args and args[args.index("-c") + 1] == "copy":
+            with open(args[-1], "r+b") as handle:
+                handle.truncate(8 * MILLION)
+
+    watch_runner(ctx, after)
+
+    result = lightened(ctx, path, target=8)
+
+    assert len(ctx.commands) == 3 and "-pass" in ctx.commands[-1]
+    assert result.path.stat().st_size < 8 * MILLION
+    assert Path(ctx.commands[0][-1]).name in held_scratch
+    assert not no_grants
+
+
+def over_twice(ctx, source_dir, monkeypatch):
+    monkeypatch.setattr(lighten, "MEGABYTE_SI", UNIT)
+    inflated(monkeypatch, 1.4)
+    monkeypatch.setattr(lighten, "SMALLEST_VIDEO_KBPS", 10_000)
+    return busy_video(source_dir / "busy.mp4"), 16, "Media Converter could not bring this video under 16 MB; choose a larger size"
+
+
+def copy_without_room(ctx, source_dir, monkeypatch):
+    real = lighten.make_room
+
+    def tight(ctx, cap, needed=0, unstoppable=0, scratch=0):
+        return replace(real(ctx, cap, needed, unstoppable, scratch), size=needed // 2)
+
+    monkeypatch.setattr(lighten, "make_room", tight)
+    return make_video(source_dir / "clip.mp4", seconds=2.0, size=(64, 48), extra=("-pix_fmt", "yuv420p")), 8, lighten.ROOM_TEXT
+
+
+def shorter_result(ctx, source_dir, monkeypatch):
+    monkeypatch.setattr(lighten, "MEGABYTE_SI", UNIT)
+    real = lighten.read_streams
+
+    def shorter(found):
+        streams = real(found)
+        if Path(found).parent == ctx.scratch_dir:
+            picture = replace(streams.video, duration=1.0)
+            return common.Streams(streams=(picture, *streams.audio), tags=streams.tags, duration=1.0)
+        return streams
+
+    monkeypatch.setattr(lighten, "read_streams", shorter)
+    return busy_video(source_dir / "busy.mp4"), 16, lighten.NOT_AS_STATED
+
+
+@pytest.mark.parametrize("scenario", [over_twice, copy_without_room, shorter_result])
+def test_a_held_file_keeps_the_refusal_of_lighten(ctx, source_dir, monkeypatch, no_grants, held_scratch, scenario):
+    path, target, message = scenario(ctx, source_dir, monkeypatch)
+
+    with pytest.raises(ToolFailed) as caught:
+        lightened(ctx, path, target=target)
+
+    assert str(caught.value) == message
+    assert held_scratch
+    assert not no_grants
+
+
+@pytest.mark.parametrize("error", [ToolCancelled(), ToolFailed("Failed to encode the media")], ids=["cancelled", "failed"])
+def test_a_held_file_keeps_the_error_that_stopped_lighten(tmp_path, source_dir, small_unit, no_grants, held_scratch, error):
+    need_encoders("libx264", "aac")
+    path = busy_video(source_dir / "busy.mp4")
+    ctx = ToolContext(tmp_path / "scratch")
+    real = ctx.runner.run
+    stopped = []
+
+    def run(args, **kwargs):
+        if "-pass" in args and args[args.index("-pass") + 1] == "2":
+            stopped.append(Path(args[-1]))
+            stopped[-1].write_bytes(bytes(1000))
+            raise error
+        return real(args, **kwargs)
+
+    ctx.runner.run = run
+
+    with pytest.raises(type(error)) as caught:
+        LightenVideo().run([ctx.probe(path, "video")], params_for(TOOL, target=16), ctx)
+
+    assert caught.value is error
+    assert stopped[0].name in held_scratch and any(name.startswith("pass-") for name in held_scratch)
+    assert not no_grants
+
+
+def test_a_held_file_is_told_in_the_log_without_its_path(ctx, source_dir, small_unit, monkeypatch, no_grants, held_scratch, caplog):
+    path = busy_video(source_dir / "busy.mp4")
+    inflated(monkeypatch, 1.4)
+
+    with caplog.at_level(logging.WARNING, logger="plugins.media-convert"):
+        result = lightened(ctx, path, target=16)
+
+    assert result.path.stat().st_size < 16 * UNIT
+    found = [record for record in caplog.records if record.name == "plugins.media-convert"]
+    assert held_scratch and len(found) == len(held_scratch)
+    assert {record.getMessage() for record in found} == {"Media Converter could not remove a working file: PermissionError"}
+    assert all(record.levelno == logging.WARNING for record in found)
+    assert not any(name in record.getMessage() for record in found for name in (str(ctx.scratch_dir), *held_scratch))
+    assert not no_grants

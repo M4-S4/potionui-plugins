@@ -251,6 +251,22 @@ def ctx(tmp_path):
 
 
 @pytest.fixture
+def held_scratch(tmp_path, monkeypatch):
+    scratch = tmp_path / "scratch"
+    held = []
+    real = Path.unlink
+
+    def unlink(self, missing_ok=False):
+        if self.is_relative_to(scratch) and self.exists():
+            held.append(self.name)
+            raise PermissionError(13, "The process cannot access the file because another process is using it", str(self))
+        return real(self, missing_ok=missing_ok)
+
+    monkeypatch.setattr(Path, "unlink", unlink)
+    return held
+
+
+@pytest.fixture
 def source_dir(tmp_path):
     folder = tmp_path / "sources"
     folder.mkdir()

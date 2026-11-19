@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 from PIL import Image
 
@@ -265,3 +267,51 @@ def test_a_part_that_gives_no_file_is_refused(ctx, source_dir, monkeypatch):
 
     with pytest.raises(ToolFailed, match="^This part of the video has no picture: choose another start$"):
         animate(ctx, path, format="webp")
+
+
+def test_a_held_palette_changes_no_animation(ctx, source_dir, no_grants, held_scratch):
+    path = make_video(source_dir / "clip.mp4", seconds=1.0, size=(64, 48))
+
+    result = animate(ctx, path, quality="small")
+
+    first, second = ctx.commands
+    assert held_scratch == [Path(first[-1]).name]
+    assert frames_of(result.path)[0] == "GIF"
+    assert not no_grants
+
+
+def test_a_held_palette_keeps_the_refusal_of_a_gif_too_large(ctx, source_dir, monkeypatch, no_grants, held_scratch):
+    path = source_dir / "noise.mp4"
+    run_ffmpeg(
+        "-f", "lavfi", "-i", "nullsrc=size=320x240:rate=25", "-vf", "geq=random(1)*255:128:128",
+        "-t", "4", "-c:v", "libx264", "-preset", "ultrafast", "-crf", "10", "-pix_fmt", "yuv420p", path,
+    )
+    monkeypatch.setattr(common, "RUN_BUDGET", 2 * common.MEGABYTE)
+
+    with pytest.raises(ToolFailed) as caught:
+        animate(ctx, path, length=4, max_side=320)
+
+    assert str(caught.value) == "This run would write more than 2 MB, the most Media Converter writes in one run; convert fewer items at a time"
+    assert held_scratch == [Path(ctx.commands[0][-1]).name]
+    assert not no_grants
+
+
+def test_a_held_palette_keeps_the_cancel_that_stopped_the_animation(tmp_path, source_dir, no_grants, held_scratch):
+    path = make_video(source_dir / "clip.mp4", seconds=1.0, size=(64, 48))
+    need_encoders("gif")
+    done = []
+    ctx = ToolContext(tmp_path / "scratch", is_cancelled=lambda: len(done) == 2)
+    real = ctx.runner.run
+
+    def run(args, **kwargs):
+        real(args, **dict(kwargs, is_cancelled=None))
+        done.append(args)
+
+    ctx.runner.run = run
+
+    with pytest.raises(ToolCancelled):
+        MakeAnimation().run([ctx.probe(path, "video")], params_for(TOOL), ctx)
+
+    assert len(done) == 2
+    assert held_scratch == [Path(done[0][-1]).name]
+    assert not no_grants
