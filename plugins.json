@@ -54,8 +54,8 @@
         "plugin_api": null
       },
       "release": {
-        "archive": null,
-        "sha256": null
+        "archive": "https://github.com/M4-S4/potionui-plugins/releases/download/media-convert-v0.2.0/media-convert-0.2.0.zip",
+        "sha256": "7c2d257b78d61d41d94c61e0c82bc810c84758e2371ca986abcf53d9c045fdab"
       }
     }
   ]
