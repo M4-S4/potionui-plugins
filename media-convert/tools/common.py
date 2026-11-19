@@ -4,6 +4,7 @@ import math
 import shutil
 import subprocess
 import threading
+import time
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Optional
@@ -26,6 +27,8 @@ H264_CRF = {"high": 18, "balanced": 23, "small": 28}
 H264_PRESET = "medium"
 VP9_CRF = {"high": 27, "balanced": 32, "small": 37}
 VP9_CPU_USED = 4
+H265_CRF = {"high": 22, "balanced": 26, "small": 30}
+H265_PRESET = "medium"
 VIDEO_AAC_KBPS = {"high": 192, "balanced": 160, "small": 128}
 VIDEO_OPUS_KBPS = {"high": 160, "balanced": 128, "small": 96}
 
@@ -36,7 +39,7 @@ FLAC_COMPRESSION = 5
 
 IMAGE_FORMATS = {"png": ".png", "jpeg": ".jpg", "webp": ".webp"}
 IMAGE_NAMES = {"png": "PNG", "jpeg": "JPEG", "webp": "WebP"}
-VIDEO_FORMATS = {"mp4": ".mp4", "mov": ".mov", "webm": ".webm"}
+VIDEO_FORMATS = {"mp4": ".mp4", "mov": ".mov", "webm": ".webm", "hevc": ".mp4"}
 VIDEO_NAMES = {"mp4": "MP4", "mov": "MOV", "webm": "WebM"}
 AUDIO_FORMATS = {"wav": ".wav", "mp3": ".mp3", "flac": ".flac", "m4a": ".m4a", "ogg": ".ogg"}
 AUDIO_NAMES = {"wav": "WAV", "mp3": "MP3", "flac": "FLAC", "m4a": "M4A", "ogg": "OGG"}
@@ -50,6 +53,8 @@ MAX_THREADS = 16
 DEFAULT_MAX_MINUTES = 30
 MAX_MINUTES = 30
 PROBE_TIMEOUT_SECONDS = 30
+COUNT_TIMEOUT_SECONDS = 60
+COUNT_POLL_SECONDS = 0.1
 
 MAX_IMAGE_PIXELS = 8192 * 8192
 MAX_VIDEO_PIXELS = 4096 * 2304
@@ -88,6 +93,10 @@ def threads() -> int:
     except (TypeError, ValueError):
         value = DEFAULT_THREADS
     return min(MAX_THREADS, max(1, value))
+
+
+def h265_allowed() -> bool:
+    return settings().get("allow_h265") is True
 
 
 def max_seconds() -> float:
@@ -166,6 +175,13 @@ def scratch_bytes(folder: Path) -> int:
     return total
 
 
+def discard(path: Path) -> None:
+    try:
+        Path(path).unlink(missing_ok=True)
+    except OSError as error:
+        logger.warning("Media Converter could not remove a working file: %s", type(error).__name__)
+
+
 def storage_limit(user_id: Optional[str], kind: str):
     if not user_id:
         return None
@@ -239,10 +255,10 @@ def refuse(room: Room, needed: int) -> None:
     raise ToolFailed(room_message(room))
 
 
-def make_room(ctx, cap: int, needed: int = 0, unstoppable: int = 0) -> Room:
+def make_room(ctx, cap: int, needed: int = 0, unstoppable: int = 0, scratch: int = 0) -> Room:
     folder = Path(ctx.scratch_dir)
     folder.mkdir(parents=True, exist_ok=True)
-    quota = quota_rooms(ctx, scratch_bytes(folder))
+    quota = [replace(item, size=item.size + scratch) for item in quota_rooms(ctx, scratch_bytes(folder))]
     with GRANTS_LOCK:
         found = rooms(ctx, cap, quota)
         for item in found:
@@ -315,6 +331,10 @@ class Stream:
     sample_rate: int = 0
     attached: bool = False
     tags: dict = field(default_factory=dict)
+    pix_fmt: str = ""
+    bit_rate: int = 0
+    rate: Optional[float] = None
+    duration: Optional[float] = None
 
 
 @dataclass(frozen=True)
@@ -338,6 +358,43 @@ class Streams:
     @property
     def other_subtitles(self) -> list:
         return [s for s in self.streams if s.kind == "subtitle" and s.codec not in TEXT_SUBTITLES]
+
+
+def whole(value) -> int:
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return 0
+
+
+def frame_rate(value) -> Optional[float]:
+    text = str(value or "")
+    try:
+        if "/" in text:
+            top, bottom = text.split("/", 1)
+            rate = float(top) / float(bottom) if float(bottom) else 0.0
+        else:
+            rate = float(text) if text else 0.0
+    except ValueError:
+        return None
+    return rate if math.isfinite(rate) and rate > 0 else None
+
+
+def stream_seconds(item: dict) -> Optional[float]:
+    tags = {str(key).lower(): value for key, value in dict(item.get("tags") or {}).items()}
+    for value in (item.get("duration"), tags.get("duration")):
+        text = str(value or "").strip()
+        try:
+            if ":" in text:
+                hours, minutes, seconds = text.split(":")
+                found = int(hours) * 3600 + int(minutes) * 60 + float(seconds)
+            else:
+                found = float(text) if text else 0.0
+        except ValueError:
+            continue
+        if math.isfinite(found) and found > 0:
+            return found
+    return None
 
 
 def ffprobe_binary() -> str:
@@ -376,6 +433,10 @@ def read_streams(path: Path) -> Streams:
             sample_rate=int(item.get("sample_rate") or 0),
             attached=bool((item.get("disposition") or {}).get("attached_pic")),
             tags=dict(item.get("tags") or {}),
+            pix_fmt=str(item.get("pix_fmt") or ""),
+            bit_rate=whole(item.get("bit_rate")),
+            rate=frame_rate(item.get("avg_frame_rate")) or frame_rate(item.get("r_frame_rate")),
+            duration=stream_seconds(item),
         )
         for item in payload.get("streams") or []
     )
@@ -385,6 +446,38 @@ def read_streams(path: Path) -> Streams:
     except (TypeError, ValueError):
         duration = None
     return Streams(streams=streams, tags=dict(container.get("tags") or {}), duration=duration)
+
+
+def count_frames(path: Path, index: int, is_cancelled=None) -> Optional[int]:
+    command = [
+        ffprobe_binary(), "-v", "error", "-protocol_whitelist", "file", "-format_whitelist", DEMUXERS,
+        "-select_streams", str(int(index)), "-count_packets", "-show_entries", "stream=nb_read_packets",
+        "-of", "csv=p=0", str(Path(path).resolve()),
+    ]
+    try:
+        process = subprocess.Popen(
+            command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL,
+            text=True, encoding="utf-8", errors="replace",
+        )
+    except OSError:
+        return None
+    deadline = time.monotonic() + COUNT_TIMEOUT_SECONDS
+    try:
+        while True:
+            try:
+                output, _ = process.communicate(timeout=COUNT_POLL_SECONDS)
+                break
+            except subprocess.TimeoutExpired:
+                if is_cancelled and is_cancelled():
+                    raise ToolCancelled()
+                if time.monotonic() >= deadline:
+                    return None
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.communicate()
+    found = whole((output or "").strip().split(",")[0]) if process.returncode == 0 else 0
+    return found or None
 
 
 def metadata_args(streams: Streams, audio: Optional[Stream], keep: bool) -> list[str]:

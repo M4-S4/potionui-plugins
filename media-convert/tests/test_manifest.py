@@ -6,19 +6,22 @@ from src.plugin_api.media import upload_formats
 from src.plugin_api.media_tools import InvalidToolParams, MediaTool
 
 import tools
-from tools import common
+from tools import animation, common, lighten
 
 from . import conftest
 from .conftest import MANIFEST, PLUGIN_ROOT, TOOLS, make_video, need_encoders, params_for
 
-ICONS_ON_BOTH_CORES = {"image", "film", "audio", "editor-music"}
+ICONS_ON_BOTH_CORES = {"image", "film", "audio", "editor-music", "play", "shrink"}
 
 SUFFIXES = {
     "media-convert.image": ("image", common.IMAGE_FORMATS),
     "media-convert.video": ("video", common.VIDEO_FORMATS),
     "media-convert.audio": ("audio", common.AUDIO_FORMATS),
     "media-convert.extract-audio": ("audio", common.AUDIO_FORMATS),
+    "media-convert.animation": ("image", animation.ANIMATION_FORMATS),
 }
+ALL_TOOLS = sorted([*SUFFIXES, "media-convert.lighten"])
+QUALITY_TOOLS = sorted(SUFFIXES)
 
 
 def options(tool_id, name):
@@ -28,14 +31,14 @@ def options(tool_id, name):
 
 def test_the_manifest_names_the_plugin_and_its_version():
     assert MANIFEST["id"] == tools.PLUGIN_ID == "media-convert"
-    assert MANIFEST["version"] == tools.PLUGIN_VERSION == "0.1.1"
+    assert MANIFEST["version"] == tools.PLUGIN_VERSION == "0.2.0"
     assert MANIFEST["type"] == "backend-only"
     assert MANIFEST["license"] == "GPL-3.0"
     assert "pages" not in MANIFEST and "api" not in MANIFEST
 
 
-def test_there_are_four_python_tools_without_a_component():
-    assert sorted(TOOLS) == sorted(SUFFIXES)
+def test_there_are_six_python_tools_without_a_component():
+    assert sorted(TOOLS) == ALL_TOOLS
     for entry in TOOLS.values():
         assert entry["python"] and "component" not in entry
         assert entry["cardinality"] == "one_to_one"
@@ -44,11 +47,18 @@ def test_there_are_four_python_tools_without_a_component():
 def test_no_tool_offers_replace_so_the_library_name_follows_the_new_format():
     for tool_id, (kind, _) in SUFFIXES.items():
         assert TOOLS[tool_id]["produces"] == kind
+    assert TOOLS["media-convert.lighten"]["produces"] == "video"
+    assert all(entry["produces"] != "same" for entry in TOOLS.values())
 
 
 def test_tools_show_in_the_library_and_the_history_only():
     for entry in TOOLS.values():
         assert entry["scopes"] == ["library", "history"]
+
+
+def test_the_new_tools_take_videos():
+    assert TOOLS["media-convert.animation"]["accepts"] == ["video"]
+    assert TOOLS["media-convert.lighten"]["accepts"] == ["video"]
 
 
 def test_extracting_the_sound_needs_a_video_with_sound():
@@ -65,7 +75,7 @@ def test_every_output_format_is_one_the_library_accepts(tool_id):
         assert suffix in accepted
 
 
-@pytest.mark.parametrize("tool_id", sorted(SUFFIXES))
+@pytest.mark.parametrize("tool_id", ALL_TOOLS)
 def test_every_tool_class_loads_and_is_a_media_tool(tool_id):
     path, _, name = TOOLS[tool_id]["python"].partition(":")
     assert (PLUGIN_ROOT / path).is_file()
@@ -73,7 +83,7 @@ def test_every_tool_class_loads_and_is_a_media_tool(tool_id):
     assert issubclass(getattr(module, name), MediaTool)
 
 
-@pytest.mark.parametrize("tool_id", sorted(SUFFIXES))
+@pytest.mark.parametrize("tool_id", QUALITY_TOOLS)
 def test_the_quality_has_three_steps_and_no_number(tool_id):
     assert options(tool_id, "quality") == list(common.QUALITIES)
     assert all(not isinstance(value, (int, float)) for value in options(tool_id, "quality"))
@@ -88,6 +98,10 @@ def test_defaults_validate_through_the_core_rules():
     }
     assert params_for("media-convert.audio") == {"format": "mp3", "quality": "balanced", "keep_metadata": True}
     assert params_for("media-convert.extract-audio") == {"format": "m4a", "quality": "balanced", "keep_metadata": True}
+    assert params_for("media-convert.animation") == {
+        "format": "gif", "start": 0, "length": 10, "max_side": 480, "frame_rate": "full", "quality": "balanced",
+    }
+    assert params_for("media-convert.lighten") == {"target": 16, "keep_sound": True, "keep_metadata": False}
 
 
 def test_lossless_formats_hide_the_quality_and_jpeg_alone_shows_the_background():
@@ -107,8 +121,33 @@ def test_the_largest_side_is_a_fixed_list_and_never_free_text():
             params_for(tool_id, format="gif")
 
 
+def test_the_animation_form_matches_the_code():
+    assert options("media-convert.animation", "max_side") == list(animation.ANIMATION_SIDES)
+    assert options("media-convert.animation", "frame_rate") == list(animation.RATE_STEPS)
+    length = next(p for p in TOOLS["media-convert.animation"]["params"] if p["name"] == "length")
+    assert (length["min"], length["max"], length["default"]) == (
+        animation.MIN_ANIMATION_SECONDS, animation.MAX_ANIMATION_SECONDS, animation.DEFAULT_ANIMATION_SECONDS,
+    )
+    with pytest.raises(InvalidToolParams):
+        params_for("media-convert.animation", start=-1)
+
+
+def test_the_lighten_form_matches_the_code():
+    assert options("media-convert.lighten", "target") == list(lighten.TARGETS_MB)
+    assert params_for("media-convert.lighten")["target"] == lighten.DEFAULT_TARGET_MB
+    with pytest.raises(InvalidToolParams):
+        params_for("media-convert.lighten", target=25)
+
+
+def test_h265_is_listed_in_convert_video_and_says_it_needs_an_admin():
+    assert options("media-convert.video", "format")[-1] == "hevc"
+    fmt = next(p for p in TOOLS["media-convert.video"]["params"] if p["name"] == "format")
+    assert "admin" in fmt["description"]
+
+
 def test_the_settings_match_the_code_defaults():
     settings = {entry["name"]: entry for entry in MANIFEST["settings"]}
+    assert settings["allow_h265"]["type"] == "boolean" and settings["allow_h265"]["default"] is False
     assert settings["ffmpeg_threads"]["default"] == common.DEFAULT_THREADS
     assert settings["ffmpeg_threads"]["max"] == common.MAX_THREADS
     assert settings["max_minutes"]["default"] == common.DEFAULT_MAX_MINUTES == 30

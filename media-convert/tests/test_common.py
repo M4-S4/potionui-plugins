@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 import pytest
@@ -5,6 +6,8 @@ import pytest
 from src.plugin_api.media_tools import ToolCancelled, ToolContext, ToolFailed
 
 from tools import common
+
+from tools.common import count_frames
 
 from .conftest import make_audio
 
@@ -141,3 +144,69 @@ def test_ffmpeg_refuses_to_encode_a_playlist_or_a_concat_list(ctx, source_dir):
         with pytest.raises(ToolFailed):
             ctx.ffmpeg([*common.input_args(path), "-c:a", "pcm_s16le", str(out)])
         assert not out.exists() or out.stat().st_size == 0
+
+
+class Endless:
+    def __init__(self, *args, **kwargs):
+        self.killed = False
+        self.returncode = None
+
+    def communicate(self, timeout=None):
+        if self.killed:
+            return "", None
+        raise common.subprocess.TimeoutExpired("ffprobe", timeout)
+
+    def kill(self):
+        self.killed = True
+
+    def poll(self):
+        return -9 if self.killed else None
+
+
+def test_counting_frames_stops_ffprobe_when_the_run_is_cancelled(tmp_path, monkeypatch):
+    made = []
+    monkeypatch.setattr(common.subprocess, "Popen", lambda *args, **kwargs: made.append(Endless()) or made[-1])
+    asked = []
+
+    with pytest.raises(ToolCancelled):
+        count_frames(tmp_path / "clip.mp4", 0, lambda: asked.append(1) or len(asked) >= 3)
+
+    assert len(asked) == 3 and made[0].killed
+
+
+def test_counting_frames_gives_up_after_its_time(tmp_path, monkeypatch):
+    made = []
+    monkeypatch.setattr(common.subprocess, "Popen", lambda *args, **kwargs: made.append(Endless()) or made[-1])
+    monkeypatch.setattr(common, "COUNT_TIMEOUT_SECONDS", 0.0)
+
+    assert count_frames(tmp_path / "clip.mp4", 0, lambda: False) is None
+    assert made[0].killed
+
+
+def test_counting_frames_stops_ffprobe_when_the_cancel_check_fails(tmp_path, monkeypatch):
+    made = []
+    monkeypatch.setattr(common.subprocess, "Popen", lambda *args, **kwargs: made.append(Endless()) or made[-1])
+
+    def broken():
+        raise RuntimeError("progress lost")
+
+    with pytest.raises(RuntimeError):
+        count_frames(tmp_path / "clip.mp4", 0, broken)
+
+    assert made[0].killed
+
+
+def test_a_working_file_that_cannot_be_removed_is_told_in_the_log_and_raises_nothing(tmp_path, held_scratch, caplog):
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    held = scratch / "out-001.mp4"
+    held.write_bytes(b"held")
+
+    with caplog.at_level(logging.WARNING, logger="plugins.media-convert"):
+        common.discard(held)
+        common.discard(scratch / "gone.mp4")
+
+    assert held.exists() and held_scratch == ["out-001.mp4"]
+    found = [record for record in caplog.records if record.name == "plugins.media-convert"]
+    assert [record.getMessage() for record in found] == ["Media Converter could not remove a working file: PermissionError"]
+    assert found[0].levelno == logging.WARNING

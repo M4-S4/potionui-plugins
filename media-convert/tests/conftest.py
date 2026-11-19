@@ -3,6 +3,7 @@ import importlib
 import json
 import re
 import shutil
+import struct
 import subprocess
 import sys
 from collections import namedtuple
@@ -142,6 +143,50 @@ def make_video(path, *, seconds=1.0, size=(64, 48), fps=10, audio=True, extra=()
     return Path(path)
 
 
+def lying_rate(folder):
+    honest = folder / "honest.mkv"
+    run_ffmpeg(
+        "-f", "lavfi", "-i", "testsrc2=size=320x240:rate=50:duration=3",
+        "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", honest,
+    )
+    data = bytearray(honest.read_bytes())
+    needle = bytes([0x23, 0xE3, 0x83, 0x84]) + (20_000_000).to_bytes(4, "big")
+    at = data.find(needle)
+    if at < 0:
+        pytest.skip("this ffmpeg writes no four-byte DefaultDuration")
+    data[at + 4:at + 8] = (1_000_000_000).to_bytes(4, "big")
+    path = folder / "liar.mkv"
+    path.write_bytes(bytes(data))
+    return path
+
+
+def clock_text(seconds):
+    whole = int(seconds)
+    return f"{whole // 3600:02d}:{whole % 3600 // 60:02d}:{whole % 60:02d}.000000000".encode("ascii")
+
+
+def lying_length(folder, *, seconds=20, stated=1, tag=False):
+    honest = folder / "long-honest.mkv"
+    run_ffmpeg(
+        "-f", "lavfi", "-i", f"testsrc2=size=64x48:rate=25:duration={seconds}",
+        "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", honest,
+    )
+    data = bytearray(honest.read_bytes())
+    needle = bytes([0x44, 0x89, 0x88]) + struct.pack(">d", seconds * 1000.0)
+    at = data.find(needle)
+    if at < 0:
+        pytest.skip("this ffmpeg writes no eight-byte segment duration")
+    data[at + 3:at + 11] = struct.pack(">d", stated * 1000.0)
+    if tag:
+        mark = data.find(clock_text(seconds))
+        if mark < 0:
+            pytest.skip("this ffmpeg writes no DURATION tag")
+        data[mark:mark + len(clock_text(seconds))] = clock_text(stated)
+    path = folder / "short-liar.mkv"
+    path.write_bytes(bytes(data))
+    return path
+
+
 def make_audio(path, *, seconds=1.0, codec_args=(), rate=44100, channels=1, extra=()):
     layout = {1: "mono", 2: "stereo", 6: "5.1"}[channels]
     run_ffmpeg(
@@ -203,6 +248,22 @@ def no_grants(monkeypatch):
 @pytest.fixture
 def ctx(tmp_path):
     return ToolContext(tmp_path / "scratch")
+
+
+@pytest.fixture
+def held_scratch(tmp_path, monkeypatch):
+    scratch = tmp_path / "scratch"
+    held = []
+    real = Path.unlink
+
+    def unlink(self, missing_ok=False):
+        if self.is_relative_to(scratch) and self.exists():
+            held.append(self.name)
+            raise PermissionError(13, "The process cannot access the file because another process is using it", str(self))
+        return real(self, missing_ok=missing_ok)
+
+    monkeypatch.setattr(Path, "unlink", unlink)
+    return held
 
 
 @pytest.fixture

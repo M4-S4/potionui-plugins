@@ -17,6 +17,7 @@ from src.features.media_tools.service import MediaToolService
 from src.features.plugins.records import Plugin
 from src.features.plugins.repository import PluginRepository
 from src.platform.filesystem.storage_driver import LocalFileStorageDriver
+from src.platform.http.errors import InvalidInputError
 from src.platform.media_tools.ffmpeg import FfmpegRunner
 from src.platform.media_tools import MediaToolRegistry
 from src.platform.media_tools.ops import register_core_tools
@@ -111,15 +112,18 @@ class Library:
         return [path for path in found if path and (self.uploads / path).is_file()]
 
 
-def test_the_four_tools_register_from_the_manifest_for_the_library_and_the_history(library):
-    ours = {"media-convert.image", "media-convert.video", "media-convert.audio", "media-convert.extract-audio"}
+def test_the_six_tools_register_from_the_manifest_for_the_library_and_the_history(library):
+    ours = {
+        "media-convert.image", "media-convert.video", "media-convert.audio", "media-convert.extract-audio",
+        "media-convert.animation", "media-convert.lighten",
+    }
     for scope in ("library", "history"):
         listed = {tool.id: tool for tool in library.service.catalog(USER, scope=scope) if tool.source == "media-convert"}
         assert set(listed) == ours
         assert all(tool.runnable for tool in listed.values())
     assert not [tool for tool in library.service.catalog(USER, scope="field") if tool.source == "media-convert"]
     for_videos = {tool.id for tool in library.service.catalog(USER, kind="video", scope="library") if tool.source == "media-convert"}
-    assert for_videos == {"media-convert.video", "media-convert.extract-audio"}
+    assert for_videos == {"media-convert.video", "media-convert.extract-audio", "media-convert.animation", "media-convert.lighten"}
 
 
 def test_a_png_published_as_webp_keeps_its_name_with_the_new_extension(library, source_dir):
@@ -291,7 +295,11 @@ def test_an_image_above_the_pixel_cap_shows_the_plugin_message(library, source_d
     assert result.error.message.startswith("This image is 8193 × 8192 pixels; Media Converter takes images of up to 67 million")
 
 
-def test_a_replace_asked_outside_the_window_keeps_the_old_name_over_the_new_content(library, source_dir):
+def core_renames_on_replace():
+    return "original_filename" in inspect.signature(UploadRepository.replace_file).parameters
+
+
+def test_a_replace_asked_outside_the_window_puts_the_new_content_in_the_same_item(library, source_dir):
     item = library.add(make_image(source_dir / "a.png", size=(32, 24)), "Chat.png", "image")
 
     result = library.service.run_blocking(
@@ -301,8 +309,85 @@ def test_a_replace_asked_outside_the_window_keeps_the_old_name_over_the_new_cont
 
     assert result.ok and result.replaced
     row = library.repo.get_by_id(item.id, USER)
-    assert row.original_filename == "Chat.png"
+    assert row.original_filename == ("Chat.webp" if core_renames_on_replace() else "Chat.png")
     assert row.filename.endswith(".webp") and row.mime_type == "image/webp"
+    assert len(library.rows()) == 1
+
+
+def test_a_video_becomes_a_looping_gif_item_with_a_thumbnail(library, source_dir):
+    need_encoders("libx264", "aac", "gif")
+    item = library.add(make_video(source_dir / "a.mp4", seconds=2.0, size=(64, 48)), "Holiday.mp4", "video")
+
+    result = library.run("media-convert.animation", {"length": 1}, item)
+
+    assert result.ok, result.error
+    [made] = result.items
+    assert made.original_filename == "Holiday.gif"
+    assert made.media_type == "image" and made.mime_type == "image/gif"
+    assert library.thumbnails(made)
+    with Image.open(library.file(made)) as image:
+        assert image.format == "GIF" and image.n_frames > 1 and image.info.get("loop") == 0
+
+
+def test_a_video_becomes_an_animated_webp_item(library, source_dir):
+    need_encoders("libx264", "aac", "libwebp_anim")
+    item = library.add(make_video(source_dir / "a.mp4", seconds=2.0, size=(64, 48)), "Holiday.mp4", "video")
+
+    result = library.run("media-convert.animation", {"format": "webp", "length": 1}, item)
+
+    assert result.ok, result.error
+    [made] = result.items
+    assert made.original_filename == "Holiday.webp" and made.mime_type == "image/webp"
+    with Image.open(library.file(made)) as image:
+        assert image.format == "WEBP" and image.n_frames > 1
+
+
+def test_a_lightened_video_is_a_new_mp4_item_under_its_target(library, source_dir):
+    need_encoders("libx264", "aac")
+    item = library.add(make_video(source_dir / "a.mkv", seconds=2.0, size=(64, 48)), "Holiday.mkv", "video")
+
+    result = library.run("media-convert.lighten", {"target": 8}, item)
+
+    assert result.ok, result.error
+    [made] = result.items
+    assert made.original_filename == "Holiday.mp4" and made.mime_type == "video/mp4"
+    assert library.file(made).stat().st_size < 8 * 1000 * 1000
+    assert library.thumbnails(made)
+
+
+def test_h265_switched_off_is_refused_when_the_run_is_planned(library, source_dir, monkeypatch):
+    item = library.add(make_video(source_dir / "a.mp4"), "Clip.mp4", "video")
+    started = []
+    monkeypatch.setattr(FfmpegRunner, "run", lambda self, *args, **kwargs: started.append(args))
+
+    with pytest.raises(InvalidInputError) as refused:
+        library.run("media-convert.video", {"format": "hevc"}, item)
+
+    assert refused.value.code == "invalid_params" and refused.value.extra.get("field") == "format"
+    assert refused.value.message.startswith("MP4 (H.265) is turned off on this server")
+    steps = [{"tool": "media-convert.video", "params": {"format": "mp4"}}, {"tool": "media-convert.video", "params": {"format": "hevc"}}]
+    with pytest.raises(InvalidInputError) as chained:
+        library.service.run_blocking(USER, steps, [{"item_id": item.id}], timeout=WAIT_SECONDS)
+    assert chained.value.extra.get("step_index") == 1
+    assert started == []
+    assert len(library.rows()) == 1 and library.guard.admits == []
+
+
+def test_the_admin_switch_lets_h265_through_the_real_settings(library, source_dir):
+    need_encoders("libx265", "aac")
+    repository = PluginRepository()
+    repository.create_plugin(Plugin(
+        id="media-convert", name="Media Converter", version="0.2.0", type="backend-only", enabled=True,
+        manifest_path=str(PLUGIN_ROOT / "manifest.yml"),
+    ))
+    repository.set_plugin_setting("media-convert", "allow_h265", "true")
+    item = library.add(make_video(source_dir / "a.mp4", seconds=0.5), "Clip.mp4", "video")
+
+    result = library.run("media-convert.video", {"format": "hevc"}, item)
+
+    assert result.ok, result.error
+    [made] = result.items
+    assert made.original_filename == "Clip.mp4" and made.mime_type == "video/mp4"
 
 
 def plugin_constants(library):
@@ -314,12 +399,24 @@ def plugin_constants(library):
 def scratch_peak(tmp_path, monkeypatch):
     seen = []
     real = FfmpegRunner.run
+    scratch = tmp_path / "scratch"
 
-    def measured(self, *args, **kwargs):
+    def run_folder(args):
+        folders = set()
+        for arg in args:
+            try:
+                folders.add(Path(str(arg)).relative_to(scratch).parts[0])
+            except (ValueError, IndexError):
+                continue
+        [folder] = folders
+        return scratch / folder
+
+    def measured(self, args, *rest, **kwargs):
+        folder = run_folder(args)
         try:
-            return real(self, *args, **kwargs)
+            return real(self, args, *rest, **kwargs)
         finally:
-            files = [path for path in (tmp_path / "scratch").rglob("*") if path.is_file()]
+            files = [path for path in folder.rglob("*") if path.is_file()]
             seen.append((sum(path.stat().st_size for path in files), sorted(path.name for path in files)))
 
     monkeypatch.setattr(FfmpegRunner, "run", measured)

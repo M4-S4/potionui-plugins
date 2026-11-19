@@ -1,7 +1,7 @@
 id: "media-convert"
 name: "Media Converter"
-version: "0.1.1"
-description: "Convert images, videos and sounds of the Library to another format, and extract the sound of a video"
+version: "0.2.0"
+description: "Convert images, videos and sounds of the Library to another format, extract the sound of a video, make an animation from a video and lighten a video for sending"
 author: "M4-S4"
 license: "GPL-3.0"
 type: "backend-only"
@@ -26,10 +26,15 @@ settings:
   - name: "max_minutes"
     type: "number"
     label: "Longest video or sound, in minutes"
-    description: "Longer files are refused with a message. PotionUI stops any conversion after 30 minutes of work, so 30 is the most this can be."
+    description: "Longer files are refused with a message, from 1 to 30 minutes."
     default: 30
     min: 1
     max: 30
+  - name: "allow_h265"
+    type: "boolean"
+    label: "Allow MP4 (H.265) in Convert video"
+    description: "Off by default. H.265 makes lighter files than H.264 but takes several times longer to encode, and some browsers and devices cannot play it. While it is off, the format stays in the list and is refused with a message."
+    default: false
   - name: "load_notice"
     type: "info"
     label: "Conversions run on the server's processor"
@@ -91,7 +96,7 @@ media_tools:
 
   - id: "media-convert.video"
     label: "Convert video"
-    description: "Save the video as MP4 or MOV (H.264) or WebM (VP9), optionally smaller"
+    description: "Save the video as MP4 or MOV (H.264), WebM (VP9) or MP4 (H.265), optionally smaller"
     icon: "film"
     accepts: [video]
     produces: video
@@ -107,6 +112,8 @@ media_tools:
           - { label: "MP4 (H.264)", value: mp4 }
           - { label: "MOV (H.264)", value: mov }
           - { label: "WebM (VP9)", value: webm }
+          - { label: "MP4 (H.265)", value: hevc }
+        description: "MP4 (H.265) works only when an admin allows it in the settings of Media Converter."
       - name: quality
         type: select
         label: "Quality"
@@ -207,3 +214,98 @@ media_tools:
         label: "Keep metadata"
         default: true
         description: "Keeps the title and the other tags of the video."
+
+  - id: "media-convert.animation"
+    label: "Make an animation"
+    description: "Save a part of the video, 30 seconds at most, as a looping GIF or animated WebP"
+    icon: "play"
+    accepts: [video]
+    produces: image
+    cardinality: one_to_one
+    scopes: [library, history]
+    python: "tools/animation.py:MakeAnimation"
+    params:
+      - name: format
+        type: select
+        label: "Format"
+        default: gif
+        description: "A GIF plays everywhere but grows fast with grain and movement, about 3 MB per second at 640 px on grainy footage in our tests; an animated WebP was 2 to 16 times lighter in our tests."
+        options:
+          - { label: "GIF", value: gif }
+          - { label: "Animated WebP", value: webp }
+      - name: start
+        type: float
+        label: "Start"
+        default: 0
+        min: 0
+        step: 0.1
+        unit: "s"
+      - name: length
+        type: float
+        label: "Length"
+        default: 10
+        min: 0.5
+        max: 30
+        step: 0.5
+        unit: "s"
+        description: "Stops at the end of the video if it comes first."
+      - name: max_side
+        type: select
+        label: "Largest side"
+        default: 480
+        description: "A smaller video keeps its size."
+        options:
+          - { label: "640 px", value: 640 }
+          - { label: "480 px", value: 480 }
+          - { label: "320 px", value: 320 }
+      - name: frame_rate
+        type: select
+        label: "Frame rate"
+        default: full
+        description: "Up to 25 per second keeps the video's rate, or a whole fraction of it that is 25 or less: 30 gives 15. Half and A third keep every second or third frame of that, so the motion stays even and the file is lighter."
+        options:
+          - { label: "Up to 25 per second", value: full }
+          - { label: "Half", value: half }
+          - { label: "A third", value: third }
+      - name: quality
+        type: select
+        label: "Quality"
+        default: balanced
+        description: "Small files lose more detail."
+        options:
+          - { label: "High", value: high }
+          - { label: "Balanced", value: balanced }
+          - { label: "Small", value: small }
+
+  - id: "media-convert.lighten"
+    label: "Lighten for sending"
+    description: "Save the video as an MP4 (H.264) under a size you choose, to send it by message or email"
+    icon: "shrink"
+    accepts: [video]
+    produces: video
+    cardinality: one_to_one
+    scopes: [library, history]
+    python: "tools/lighten.py:LightenVideo"
+    params:
+      - name: target
+        type: select
+        label: "Largest size"
+        default: 16
+        description: "A video already lighter than this, in MP4 or MOV with an 8-bit 4:2:0 H.264 picture and AAC sound in mono or stereo, is copied without being encoded again."
+        options:
+          - { label: "8 MB", value: 8 }
+          - { label: "16 MB", value: 16 }
+          - { label: "18 MB", value: 18 }
+          - { label: "20 MB", value: 20 }
+          - { label: "30 MB", value: 30 }
+          - { label: "50 MB", value: 50 }
+      - name: keep_sound
+        type: checkbox
+        label: "Keep the sound"
+        default: true
+        description: "Off, the result has no sound and leaves more room for the picture."
+      - name: keep_metadata
+        type: checkbox
+        label: "Keep metadata"
+        default: false
+        description: "Off by default, so that the place where the video was filmed does not leave with it. On, the title and the other tags are kept too."
