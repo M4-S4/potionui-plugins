@@ -42,8 +42,8 @@
     {
       "id": "media-convert",
       "name": "Media Converter",
-      "version": "0.1.1",
-      "description": "Convert images, videos and sounds of the Library to another format, and extract the sound of a video",
+      "version": "0.2.0",
+      "description": "Convert images, videos and sounds of the Library to another format, extract the sound of a video, make an animation from a video and lighten a video for sending",
       "license": "GPL-3.0",
       "source": {
         "repository": "M4-S4/potionui-plugins",
@@ -54,8 +54,8 @@
         "plugin_api": null
       },
       "release": {
-        "archive": "https://github.com/M4-S4/potionui-plugins/releases/download/media-convert-v0.1.1/media-convert-0.1.1.zip",
-        "sha256": "2db069e32c7320f25f960d7d95b19953c58dfe6adf2fbd7a3c9d5c2e78374a07"
+        "archive": null,
+        "sha256": null
       }
     }
   ]
