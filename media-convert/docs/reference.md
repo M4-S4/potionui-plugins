@@ -54,7 +54,7 @@ The first step is the video's frame rate divided by the smallest whole number th
 
 The result is a GIF or an animated WebP that loops forever, with no sound. A GIF is made in two steps: ffmpeg first reads the chosen part of the video to work out a palette of colours, saved as a small PNG in the working folder, then reads it again to write the GIF with that palette; the PNG is deleted afterwards. The palette keeps no transparent colour, so the GIF is opaque. An animated WebP is written in one step; the WebP encoder may draw a frame over the one before and leave transparent the areas that do not change, and the file is then marked as transparent although every frame it shows is opaque, so a tool or a viewer that reads that mark may treat it as a transparent picture. In our tests, the WebP of a test pattern was marked so, and the WebP of grainy footage, whose every frame changes everywhere, was not. The length limit of the admin settings does not apply: the tool reads 30 seconds at most, wherever they are in the video.
 
-A GIF grows fast with grain and movement. In our tests, 15 seconds at 480 px weighed about 5 MB from a clean video and 23 MB from a grainy one, and 16 seconds of grainy footage at 640 px and High weighed 47 MB; the same in animated WebP weighed 2 to 16 times less. For a light GIF, pick 320 px, Half or A third, or the animated WebP.
+A GIF grows fast with grain and movement. In our tests, 15 seconds at 480 px weighed about 5 MB from a clean video and 23 MB from a grainy one, and 16 seconds of grainy footage at 640 px and High weighed 47 MB; the same in animated WebP weighed 2 to 16 times less. For a light GIF, pick 320 px, Half or A third, or the animated WebP. Not every app animates an animated WebP: in our tests on an iPhone, one stayed on its first frame, while the GIF looped in the Photos app and in Messages, with visible colour bands.
 
 ### Lighten for sending
 
@@ -64,7 +64,7 @@ A GIF grows fast with grain and movement. In our tests, 15 seconds at 480 px wei
 | Keep the sound | On by default. Off, the result has no sound. |
 | Keep metadata | Off by default. |
 
-The result is an MP4 in H.264 (`libx264`, preset `medium`, 8-bit 4:2:0, High profile) with AAC sound and the index at the start of the file, so that it starts to play before it is fully downloaded. It is worked out this way:
+The result is an MP4 in H.264 (`libx264`, preset `medium`, 8-bit 4:2:0, High profile) with AAC sound and the index at the start of the file, so that it starts to play before it is fully downloaded. A messaging app may still compress the video again when you send it: in our tests, one did with a video lightened for 16 MB. It is worked out this way:
 
 1. The length is that of what is kept: the picture, and the sound when Keep the sound is on, whichever lasts longer. The budget is the chosen size less 4 %, spread over that length.
 2. The sound gets 128 kbit/s when the whole file may use 1000 kbit/s or more, 96 kbit/s from 500, 64 kbit/s below, and never more than the sound of the source. More than two channels are mixed down to stereo.
