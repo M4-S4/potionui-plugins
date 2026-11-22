@@ -200,6 +200,8 @@ def test_api_module_loads_and_exposes_the_router(loader, manifest):
         ("POST", f"{base}/projects/{{project_id}}/takes/{{take_id}}/flag"),
         ("DELETE", f"{base}/projects/{{project_id}}/takes/{{take_id}}"),
         ("POST", f"{base}/projects/{{project_id}}/takes/{{take_id}}/final"),
+        ("POST", f"{base}/projects/{{project_id}}/takes/{{take_id}}/retouch"),
+        ("GET", f"{base}/retouch/offers"),
         ("POST", f"{base}/takes/{{take_id}}/cancel"),
         ("POST", f"{base}/takes/{{take_id}}/retry"),
         ("POST", f"{base}/projects/{{project_id}}/estimate"),
@@ -1493,7 +1495,7 @@ SHIPPED_PRESETS = {
         defaults={**H3_DEFAULTS, "speed_profile": "custom", "steps": 20},
         recommended={"model": [COMFY_DIT, WAN2GP_DIT], "text_encoder": [TEXT_ENCODER], "video_vae": [VIDEO_VAE], "audio_vae": [AUDIO_VAE]},
         modes=("video", "refs"),
-        own_modes=("extend",),
+        own_modes=("extend", "refine_faces", "remix"),
     ),
     H3_FAST_12GB: Shipped(
         name="MiniMax-H3-Fast (12 GB)",
@@ -1517,7 +1519,7 @@ SHIPPED_PRESETS = {
         },
         defaults={**H3_DEFAULTS, "speed_profile": "distilled", "steps": 8},
         recommended={"model": [FASTH3_DIT], "text_encoder": [TEXT_ENCODER], "video_vae": [VIDEO_VAE], "audio_vae": [AUDIO_VAE]},
-        own_modes=("extend",),
+        own_modes=("extend", "refine_faces"),
     ),
 }
 H3_PRESETS = {preset_id: shipped for preset_id, shipped in SHIPPED_PRESETS.items() if not shipped.is_wan}

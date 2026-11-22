@@ -191,6 +191,10 @@ A take is **Selected** when it is the one its shot plays, and of **Final** quali
 - **The take card** shows the letter, the quality, the engine, the label and the state. A failed take explains the cause in plain words, with **Retry**. The card also offers **Take details**, **Compare**, **Extract a frame at the playhead** (chapter 10), **Generation details** and **Delete**.
 - **Assemble chosen takes**, at the bottom of the **Review**, puts every selected take in the cut.
 
+**Retouch a range** fixes part of a finished take instead of the whole shot, with the 12 GB MiniMax H3 presets. Open it from the wand of a take card, or with **Shot › Retouch a range of the take…**. Mark the range with its handles or with **I** and **O**, choose **Refine faces** (the faces, the hands or both) or **Remix** (1 to 3 seconds, from a change written in English), and click **Retouch range**. The result is a new take of the same shot, with the same length and sound; **Compare with** and the letter of the original take, on its card, shows both takes side by side. See chapter 9 of the reference, [Retouching a range of a take](user-reference.md#retouching-a-range-of-a-take).
+
+![Screenshot: the Retouch a range bar under the viewer, on Refine faces, dark theme](https://raw.githubusercontent.com/M4-S4/potionui-plugins/main/video-producer/docs/screenshots/guide-retouch-dark.webp)
+
 **Final render…** on a draft offers:
 
 - **Upscale** (the default), which enlarges the take as it is, without changing the motion. The **Upscaler** is **Automatic**, **Fast (RTX)** (seconds, sharp, adds no detail), **SeedVR2** (slow, restores detail) or, for a take of the base MiniMax H3 preset, **Engine**; **Auto**, as **Target resolution**, gives the size the film needs.

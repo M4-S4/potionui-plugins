@@ -8,7 +8,7 @@ import { chainBusy, chainOf, takeEndFrame } from './chain.svelte.js';
 
 export const seamState = $state({ busy: null });
 
-export const extractable = (take) => Boolean(take && take.status === 'done' && take.generationId && take.fileId !== null && take.fileId !== undefined);
+export const extractable = (take) => Boolean(take && take.status === 'done' && (take.origin || (take.generationId && take.fileId !== null && take.fileId !== undefined)));
 
 export function seamOffer(clip) {
 	const prev = clip ? previousShot(doc, clip.id) : null;

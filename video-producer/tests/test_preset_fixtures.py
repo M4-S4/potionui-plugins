@@ -48,7 +48,10 @@ def test_the_check_reaches_every_double_of_a_12_gb_preset(core):
         getattr(core, use)()
         reached |= {key for key in core.fields if key[0] in TWELVE_GB}
 
-    assert reached == {(H3_12GB_ID, "video"), (H3_12GB_ID, "refs"), (H3_12GB_ID, "extend"), (H3_FAST_12GB_ID, "video"), (H3_FAST_12GB_ID, "extend")}
+    assert reached == {
+        (H3_12GB_ID, "video"), (H3_12GB_ID, "refs"), (H3_12GB_ID, "extend"), (H3_12GB_ID, "refine_faces"), (H3_12GB_ID, "remix"),
+        (H3_FAST_12GB_ID, "video"), (H3_FAST_12GB_ID, "extend"), (H3_FAST_12GB_ID, "refine_faces"),
+    }
 
 
 @pytest.mark.parametrize("use", USES)

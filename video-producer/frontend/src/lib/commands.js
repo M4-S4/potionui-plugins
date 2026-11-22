@@ -48,6 +48,7 @@ import { detectMac, findShortcut, formatShortcut, hostModalOpen, hostOverlayOpen
 import { frameDuration } from './timebase.js';
 import { closeTopLayer } from './focus.js';
 import { zoomIn, zoomOut } from './timeline.js';
+import { retouch, retouchCurrent, retouchOpen, setEdge } from './retouch.svelte.js';
 
 export const IS_MAC = detectMac();
 
@@ -273,7 +274,7 @@ export const menus = [
 	menu('clip', [
 		[command('new-shot', newShot), command('info', () => (ui.inspectorOpen = !ui.inspectorOpen)), command('reveal', ws('media'))],
 		[command('pick-all', pickEvery), command('clear-picked', clearPicked)],
-		[command('takes', takes, { keys: 't' }), command('shot-editor', shotEditor, { keys: 'e' }), command('promote', promote, { keys: 'shift+mod+g', claim: true })],
+		[command('takes', takes, { keys: 't' }), command('shot-editor', shotEditor, { keys: 'e' }), command('promote', promote, { keys: 'shift+mod+g', claim: true }), command('retouch', retouchCurrent)],
 		[command('color', scopes), command('match', match)],
 		[command('fav', flag('favori'), { keys: 'f' }), command('reject', flag('rejet'), { keys: 'alt+backspace' }), command('unflag', flag(null), { keys: 'u' })]
 	]),
@@ -384,6 +385,7 @@ export async function save() {
 }
 
 export function setInOut(edge) {
+	if (retouchOpen()) return setEdge(edge, retouch.time);
 	const at = ui.playhead;
 	const r = ui.range ?? { in: at, out: Math.min(seqDuration(), at + 4) };
 	if (edge === 'in') r.in = Math.min(at, r.out - 0.2);

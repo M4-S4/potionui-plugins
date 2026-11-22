@@ -1153,7 +1153,6 @@ def test_a_shot_that_starts_after_the_end_of_its_source_does_not_swallow_the_mem
     files = {"c0": _file(source), "c1": _file(source)}
     command, cwd = _prepare(doc, files, tmp_path, "late", audio={"c0": True, "c1": True})
     command = [argument for argument in command if argument not in ("-progress", "pipe:1")]
-    # glibc reserves an arena of address space per thread, which RLIMIT_AS counts like memory
     environment = {**os.environ, "MALLOC_ARENA_MAX": "2"}
 
     run = subprocess.run(command, capture_output=True, timeout=120, preexec_fn=_limited(2), env=environment, cwd=cwd)

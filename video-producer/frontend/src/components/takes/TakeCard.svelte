@@ -20,6 +20,8 @@
 	import { conformTakes, renditionStore } from '../../lib/renditions.svelte.js';
 	import Icon from '../Icon.svelte';
 	import TakeToRefs from './TakeToRefs.svelte';
+	import { canRetouch, isRetouch } from '../../lib/retouch.js';
+	import { openRetouch, compareRetouch, rangeSecs } from '../../lib/retouch.svelte.js';
 
 	let { take, clip, onchoose = null, chosen = false } = $props();
 
@@ -61,6 +63,7 @@
 	function qualityText() {
 		if (take.kind === 'upscale') return t('generation.card.upscale');
 		if (take.kind === 'guided') return t('generation.card.guided');
+		if (isRetouch(take)) return take.retouch?.task === 'remix' ? t('generation.retouch.task.remix') : t('generation.retouch.task.refine');
 		return take.quality === 'final' ? t('generation.card.qualityFinal') : t('generation.card.qualityDraft');
 	}
 
@@ -143,6 +146,7 @@
 					{/if}
 				</div>
 				<div class="truncate text-fg-muted" title={[engineName, backendText].filter(Boolean).join(' · ')} data-take-engine>{engineName}</div>
+				{#if take.retouch}<div class="vp-tc truncate text-fg-subtle" title={take.retouch.prompt || undefined} data-take-retouch>{t('generation.retouch.cardRange', { start: rangeSecs(take.retouch.start), end: rangeSecs(take.retouch.end) })}</div>{/if}
 				<div class="flex min-w-0 items-center gap-1.5">
 					<span class="shrink-0 rounded-sm border px-1 text-2xs font-medium {LABEL_TONES[label]}">{t(`generation.label.${label}`)}</span>
 					{#each vrefs as track (track.id)}<span class="{TAG_CLASS} vp-tc shrink-0" title={t('generation.card.refs.chipTip', { track: trackName(track), role: roleLabel(track.role) })} data-take-vref={track.slot}>{vrefLabel(track.slot)}</span>{/each}
@@ -190,6 +194,12 @@
 				/>
 			{/if}
 			{#if done}<TakeToRefs {take} {clip} />{/if}
+			{#if canRetouch(take)}
+				<HostUi name="IconButton" props={{ icon: hostIconName('wand'), label: t('generation.retouch.cardAction', { variant: take.variant }), tooltip: t('generation.retouch.cardTip'), size: 'xs', onclick: () => openRetouch(take) }} />
+			{/if}
+			{#if done && isRetouch(take) && parent}
+				<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', onclick: () => compareRetouch(take) }}>{t('generation.retouch.compareWith', { variant: parent.variant })}</HostUi>
+			{/if}
 			{#if clip && extractable(take)}
 				<HostUi
 					name="IconButton"

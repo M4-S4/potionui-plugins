@@ -182,7 +182,7 @@ def _seam_source(body: Any) -> Tuple[Optional[str], Any]:
 
 
 def _with_file(take: Optional[Dict[str, Any]]) -> bool:
-    return bool(take and take["status"] == "done" and take.get("generation_id") and take.get("file_id") and take.get("file_path"))
+    return bool(take and take["status"] == "done" and takes.media_ref(take) and take.get("file_path"))
 
 
 def _previous_take(project: Dict[str, Any], clips: List[Dict[str, Any]], index: int) -> Dict[str, Any]:
@@ -217,7 +217,7 @@ async def seam_frame(
         if not _with_file(take):
             fail(409, "no_previous_take", "The take has no finished file.")
     owner = access.owner_of(user, project)
-    ref = {"kind": "history", "generation_id": take["generation_id"], "file_id": take["file_id"]}
+    ref = takes.media_ref(take)
     try:
         frame = await core_bridge.extract_frame(owner, ref, at)
     except MediaRefError as exc:

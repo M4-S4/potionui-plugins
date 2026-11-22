@@ -105,5 +105,6 @@
 	"cmd.view-references": "Références",
 	"cmd.pick-all": "Choisir tous les plans",
 	"cmd.clear-picked": "Vider la sélection de plans",
-	"cmd.import-cuts": "Importer un montage en plans…"
+	"cmd.import-cuts": "Importer un montage en plans…",
+	"cmd.retouch": "Retoucher une plage de la prise…"
 }

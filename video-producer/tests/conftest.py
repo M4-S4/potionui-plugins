@@ -379,6 +379,28 @@ def h3_fast_12gb_video_fields():
     return fields
 
 
+def refine_fields(fields, profiles=("quality", "turbo", "custom"), steps=6):
+    fields = {name: spec for name, spec in fields.items() if name in ("seed", "model", "text_encoder", "video_vae", "audio_vae")}
+    fields["speed_profile"] = _plain("select", "custom", profiles)
+    fields["steps"] = _plain("slider", steps)
+    fields["input_video"] = _plain("video", required=True)
+    fields["refine_faces"] = _plain("checkbox", True)
+    fields["refine_hands"] = _plain("checkbox", True)
+    fields["enhancement_strength"] = _plain("select", "balanced", ("light", "balanced", "strong"))
+    fields["face_detector_model"] = _model("face_detector_model", required=False, sha256=None)
+    fields["hand_detector_model"] = _model("hand_detector_model", required=False, sha256=None)
+    return fields
+
+
+def remix_fields():
+    fields = {name: spec for name, spec in h3_12gb_refs_fields().items() if name in ("seed", "quantity", "speed_profile", "resolution", "steps", "model", "text_encoder", "video_vae", "audio_vae")}
+    fields["source_video"] = _plain("video", required=True)
+    fields["pictures"] = _plain("image")
+    fields["keep_sound"] = _plain("checkbox", True)
+    fields["max_seconds"] = _plain("slider", 14)
+    return fields
+
+
 def h3_fast_12gb_continue_fields():
     fields = h3_fast_12gb_video_fields()
     fields.pop("upscale_model")
@@ -673,6 +695,20 @@ class FakeCore:
 
     def use_h3_12gb(self):
         return self.add_preset(H3_12GB_ID, "MiniMax-H3 (12 GB)", {"video": h3_12gb_video_fields(), "refs": h3_12gb_refs_fields()}, variables=H3_VARS)
+
+    def use_h3_retouch(self):
+        self.add_preset(
+            H3_FAST_12GB_ID,
+            "MiniMax-H3-Fast (12 GB)",
+            {"video": h3_fast_12gb_video_fields(), "refine_faces": refine_fields(h3_fast_12gb_video_fields(), ("distilled", "custom"), 4)},
+            variables=H3_VARS,
+        )
+        return self.add_preset(
+            H3_12GB_ID,
+            "MiniMax-H3 (12 GB)",
+            {"video": h3_12gb_video_fields(), "refs": h3_12gb_refs_fields(), "refine_faces": refine_fields(h3_12gb_video_fields()), "remix": remix_fields()},
+            variables=H3_VARS,
+        )
 
     def use_h3_continue(self):
         self.add_preset(
@@ -1034,7 +1070,7 @@ class MediaStore:
         self.saved = []
         self.items = {}
 
-    async def save_user_media(self, user, path):
+    async def save_user_media(self, user, path, purpose=None):
         from pathlib import Path
 
         source = Path(path)

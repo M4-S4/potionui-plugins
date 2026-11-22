@@ -342,7 +342,7 @@ export function normalizeTake(value) {
 		shotId: text(value.shot_id) || null,
 		generationId: idText(value.generation_id),
 		quality: value.quality === 'final' ? 'final' : 'draft',
-		kind: ['upscale', 'guided', 'keyframe'].includes(value.kind) ? value.kind : 'render',
+		kind: ['upscale', 'guided', 'keyframe', 'retouch'].includes(value.kind) ? value.kind : 'render',
 		parentTakeId: text(value.parent_take_id) || null,
 		presetId: text(value.preset_id) || null,
 		mode: text(value.mode) || null,
@@ -378,8 +378,51 @@ export function normalizeTake(value) {
 		chain: normalizeChain(value.chain),
 		frameRole: value.frame_role === 'first' || value.frame_role === 'last' ? value.frame_role : null,
 		videoRefs: list(value.video_refs, normalizeVideoRef) ?? [],
-		frameNotes: list(value.frame_notes, normalizeFrameNote) ?? []
+		frameNotes: list(value.frame_notes, normalizeFrameNote) ?? [],
+		origin: normalizeOrigin(value.origin),
+		retouch: normalizeRetouch(value.retouch)
 	};
+}
+
+const RETOUCH_TASKS = ['refine_faces', 'remix'];
+const RETOUCH_STRENGTHS = ['light', 'balanced', 'strong'];
+
+export function normalizeRetouch(value) {
+	if (!isObject(value) || !RETOUCH_TASKS.includes(value.task)) return null;
+	const start = number(value.start_s);
+	const end = number(value.end_s);
+	if (start === null || end === null || end <= start) return null;
+	return {
+		task: value.task,
+		start,
+		end,
+		sourceTakeId: text(value.source_take_id) || null,
+		presetId: text(value.preset_id) || null,
+		prompt: text(value.prompt),
+		strength: RETOUCH_STRENGTHS.includes(value.strength) ? value.strength : null,
+		faces: value.faces !== false,
+		hands: value.hands !== false
+	};
+}
+
+function normalizeRetouchOffer(value) {
+	if (!isObject(value) || !RETOUCH_TASKS.includes(value.task)) return null;
+	const engines = (Array.isArray(value.engines) ? value.engines : [])
+		.filter((engine) => isObject(engine) && text(engine.preset_id))
+		.map((engine) => ({ presetId: engine.preset_id, name: text(engine.name) || engine.preset_id }));
+	return {
+		task: value.task,
+		engines,
+		minS: number(value.min_s),
+		maxS: number(value.max_s),
+		ready: value.ready === true,
+		reason: text(value.reason) || null,
+		missing: (Array.isArray(value.missing) ? value.missing : []).filter((name) => text(name))
+	};
+}
+
+export function normalizeRetouchOffers(value) {
+	return isObject(value) ? (list(value.offers, normalizeRetouchOffer) ?? []) : [];
 }
 
 function normalizeFrameNote(value) {
@@ -960,6 +1003,12 @@ export function createClient(api, save) {
 		},
 		async cancelTake(takeId) {
 			return mapped(await call(api, 'post', `/takes/${encodeURIComponent(takeId)}/cancel`, {}), pickTake);
+		},
+		async retouchOffers(signal) {
+			return mapped(await call(api, 'get', '/retouch/offers', undefined, signal), normalizeRetouchOffers);
+		},
+		async retouchTake(projectId, takeId, body) {
+			return mapped(await call(api, 'post', `${takePath(projectId, takeId)}/retouch`, body), pickTake);
 		},
 		async retryTake(takeId) {
 			return mapped(await call(api, 'post', `/takes/${encodeURIComponent(takeId)}/retry`, {}), pickTake);

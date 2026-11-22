@@ -105,5 +105,6 @@
 	"cmd.view-references": "References",
 	"cmd.pick-all": "Pick every shot",
 	"cmd.clear-picked": "Clear the selection of shots",
-	"cmd.import-cuts": "Import a cut as shots…"
+	"cmd.import-cuts": "Import a cut as shots…",
+	"cmd.retouch": "Retouch a range of the take…"
 }

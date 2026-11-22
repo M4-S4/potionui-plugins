@@ -21,6 +21,9 @@
 	import MatchCanvas from './MatchCanvas.svelte';
 	import DissolveLayer from './DissolveLayer.svelte';
 	import { mixAt, unfaded } from '../../lib/dissolve.js';
+	import RetouchBar from './RetouchBar.svelte';
+	import { retouchPair, shareOf } from '../../lib/retouch.js';
+	import { retouchOpen, openRetouch } from '../../lib/retouch.svelte.js';
 	import Icon from '../Icon.svelte';
 
 	let { player = false } = $props();
@@ -103,6 +106,17 @@
 	function takeLabel(res) {
 		const shot = clipLabel(doc.clips.find((c) => c.id === res.shotId));
 		return res.quality === 'final' ? t('viewer.takeFinal', { shot, variant: res.variant }) : t('viewer.takeDraft', { shot, variant: res.variant });
+	}
+
+	const pair = $derived(!player && compareRes.length === 2 ? retouchPair(compareRes) : null);
+	const pairShare = $derived(pair?.retouched.retouch ? shareOf(pair.retouched.retouch, pair.source.durationS ?? 0) : null);
+
+	function keepSource() {
+		ui.compare = null;
+	}
+	function useRetouched() {
+		insertResult(pair.retouched.id);
+		ui.compare = null;
 	}
 
 	function backToSequence() {
@@ -288,6 +302,22 @@
 		</div>
 	</div>
 
+	{#if !player && retouchOpen()}
+		<RetouchBar video={resultVideo} />
+	{:else if pair}
+		<div class="space-y-2 border-t border-line bg-surface-1 px-3 pb-2.5 pt-2" role="region" aria-label={t('generation.retouch.compareTitle')} data-retouch-compare>
+			{#if pairShare}
+				<div class="relative h-3 overflow-hidden rounded-sm bg-surface-2"><div class="absolute inset-y-0 bg-signal/40" style:left="{pairShare.left}%" style:width="{pairShare.width}%"></div></div>
+			{/if}
+			<div class="flex flex-wrap items-center gap-2 text-xs text-fg-muted">
+				<span>{t('generation.retouch.outside', { variant: pair.source.variant })}</span>
+				<span class="flex-1"></span>
+				<HostUi name="Button" props={{ variant: 'secondary', size: 'xs', onclick: () => openRetouch(pair.retouched) }}>{t('generation.retouch.again', { variant: pair.retouched.variant })}</HostUi>
+				<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', onclick: keepSource }}>{t('generation.retouch.keep', { variant: pair.source.variant })}</HostUi>
+				<HostUi name="Button" props={{ variant: 'primary', size: 'xs', disabled: !playable(pair.retouched), onclick: useRetouched }}>{t('generation.retouch.use', { variant: pair.retouched.variant })}</HostUi>
+			</div>
+		</div>
+	{/if}
 	<div class="grid h-11 shrink-0 items-center gap-3 border-t border-line px-3" style:grid-template-columns="minmax(0, 1fr) auto minmax(max-content, 1fr)">
 		<div class="flex min-w-0 items-center gap-2 overflow-hidden" bind:clientWidth={sideW}>
 			<HostUi

@@ -1,0 +1,88 @@
+fields:
+- name: "model"
+  type: "model"
+  label: "MiniMax-H3-Fast DiT"
+  required: true
+  ai_hint: "Must be the FastVideo FastH3 8-Step V2 repack (filenames start `fastvideo_fasth3_8step_v2_`), NOT the base MiniMax-H3 checkpoint -- both are the same 50-block architecture and key set, so nothing here can detect a mismatch; a base checkpoint loads without complaint and simply isn't distilled for 8 steps. Tag your FastH3 files distinctly from the base preset's (e.g. a 'minimax-h3-fast' model tag) so this preset's Checkpoint tags configuration can scope the picker to just them."
+  configuration:
+    model_type: "diffusion_model"
+    placeholder: "fastvideo_fasth3_8step_v2_pruned_int8_convrot..."
+    filter_tags: "@config:checkpoint_tags"
+    recommendations:
+      - name: "fastvideo_fasth3_8step_v2_pruned_int8_convrot.safetensors"
+        link: "https://huggingface.co/FastVideo/FastVideo-FastH3-Comfy/resolve/main/diffusion_models/fastvideo_fasth3_8step_v2_pruned_int8_convrot.safetensors"
+        size: "20.61 GB"
+        sha256: "0922785978dc9bfe1adf27d8b291b0ca763f9f165f882e6cb297c72fbb6deda8"
+        description: "FastH3 8-Step V2, pruned + int8 ConvRot - the 12 GB profile's DiT, no fp8 hardware needed."
+
+- name: "text_encoder"
+  type: "model"
+  label: "Text Encoder (Qwen3-VL-32B)"
+  required: true
+  ai_hint: "Identical files to the base MiniMax-H3 preset's text encoder -- FastH3 reuses the same Qwen3-VL-32B conditioning stack unchanged."
+  configuration:
+    model_type: "text_encoder"
+    placeholder: "qwen3vl_32b_minimax_h3_nvfp4_awq..."
+    filter_tags: "@config:text_encoder_tags"
+    recommendations:
+      - name: "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors"
+        link: "https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/text_encoders/qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors"
+        size: "14.61 GB"
+        sha256: "35a88d51044231fe332301d7a62aa81e3f2cba62febeb446e2c1e3e0ef76f2c6"
+        description: "Qwen3-VL-32B encoder, nvfp4 AWQ - larger than a 12 GB card, so the 12 GB profile streams it from system RAM."
+
+- name: "video_vae"
+  type: "model"
+  label: "Video VAE"
+  required: true
+  ai_hint: "The same int8 ConvRot file as the MiniMax-H3 (12 GB) preset's video VAE."
+  configuration:
+    model_type: "vae"
+    placeholder: "minimax_h3_video_vae_int8_convrot..."
+    filter_tags: "@config:vae_tags"
+    recommendations:
+      - name: "minimax_h3_video_vae_int8_convrot.safetensors"
+        link: "https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/vae/minimax_h3_video_vae_int8_convrot.safetensors"
+        size: "2.62 GB"
+        sha256: "52a2c8c73583c86e4f41cdcce3a6ad0ea562987bc0bf3d60a0cef5f5c8e60c0e"
+        description: "MiniMax-H3 video VAE, int8 ConvRot - about half the fp16 file."
+
+- name: "audio_vae"
+  type: "model"
+  label: "Audio VAE"
+  required: true
+  ai_hint: "Identical file to the base MiniMax-H3 preset's audio VAE - required for the audio track."
+  configuration:
+    model_type: "vae"
+    placeholder: "minimax_h3_audio_vae..."
+    filter_tags: "@config:vae_tags"
+    recommendations:
+      - name: "minimax_h3_audio_vae_fp32.safetensors"
+        link: "https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/vae/minimax_h3_audio_vae_fp32.safetensors"
+        size: "577.2 MB"
+        sha256: "8e505d95dd1561d47abd43d4238fd40d9bb1ae9e147ed0a4cba778d76ae4db48"
+        description: "MiniMax-H3 audio VAE, fp32 - required for the audio track."
+
+- name: "face_detector_model"
+  type: "model"
+  formula: "models"
+  label: "Face Detection Model"
+  configuration:
+    model_type: "mediapipe"
+  reactions:
+    - when: { field: "refine_faces", equals: false }
+      then: { set_visibility: false }
+    - when: { field: "refine_faces", equals: true }
+      then: { set_visibility: true }
+
+- name: "hand_detector_model"
+  type: "model"
+  formula: "models"
+  label: "Hand Detection Model"
+  configuration:
+    model_type: "mediapipe"
+  reactions:
+    - when: { field: "refine_hands", equals: false }
+      then: { set_visibility: false }
+    - when: { field: "refine_hands", equals: true }
+      then: { set_visibility: true }

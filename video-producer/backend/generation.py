@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import secrets
 import threading
@@ -450,6 +451,10 @@ def state_duration_ms(state: Mapping[str, Any]) -> Optional[int]:
 
 def finish_done(take: Mapping[str, Any], user: User, state: Mapping[str, Any]) -> bool:
     """End a take whose generation completed: its video (its image for a start image candidate), thumbnail, calibration, quota adjustment and notification."""
+    if take.get("kind") == takes.RETOUCH:
+        from . import retouch
+
+        return retouch.land(take, user, state)
     try:
         files = core_bridge.list_generation_files(user, take["generation_id"])
     except GenerationNotFoundException:
@@ -484,6 +489,17 @@ def finish_done(take: Mapping[str, Any], user: User, state: Mapping[str, Any]) -
     takes.close_jobs(take["id"])
     _notify(take, done=True)
     looks.queue_take(take)
+    return True
+
+
+def complete_retouch(take: Mapping[str, Any], fields: Mapping[str, Any], duration_ms: Optional[int]) -> bool:
+    values = {**fields, "media_ref": json.dumps(fields["media_ref"]) if fields.get("media_ref") else None}
+    if not takes.settle(take["id"], "done", **values, progress=100.0, step=None, started_at=take.get("started_at"), finished_at=takes.now()):
+        return False
+    _adjust(take, duration_ms)
+    takes.close_jobs(take["id"])
+    _notify(take, done=True)
+    looks.queue_take(takes.get_take(take["id"]) or take)
     return True
 
 
@@ -716,7 +732,7 @@ async def with_first(owner: User, project: Mapping[str, Any], pairs: List[Tuple[
     for source, plan in pairs:
         if not director.is_guided(plan) or director.has_first(plan):
             continue
-        ref = {"kind": "history", "generation_id": str(source.get("generation_id")), "file_id": str(source.get("file_id"))}
+        ref = takes.media_ref(source) or {"kind": "history", "generation_id": str(source.get("generation_id")), "file_id": str(source.get("file_id"))}
         try:
             stored = await core_bridge.extract_frame(owner, ref, at=0.0)
         except Exception:

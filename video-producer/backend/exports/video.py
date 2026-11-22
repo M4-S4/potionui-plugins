@@ -844,7 +844,6 @@ def _assembly(
             if shot.blind:
                 graph.append(black)
             else:
-                # one frame of slack: a file can end a frame before its probed length
                 pad = shot.dur if shot.source_end is None else min(shot.dur, max(shot.start + shot.span - shot.source_end, 0.0) / shot.speed + 1 / rate)
                 video = [
                     f"trim=start={num(shot.start)}:duration={num(shot.span)}",

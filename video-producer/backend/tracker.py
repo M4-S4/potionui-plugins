@@ -3,7 +3,7 @@ import logging
 import threading
 from typing import Any, Dict, Optional
 
-from . import chaining, core_bridge, generation, looks, renditions, takes
+from . import chaining, core_bridge, generation, looks, renditions, retouch, takes
 from .core_bridge import GenerationNotFoundException
 
 logger = logging.getLogger("plugins.video-producer")
@@ -87,6 +87,7 @@ class Tracker:
             except Exception:
                 logger.warning("[VIDEO-PRODUCER] Could not follow generation %s", take["generation_id"], exc_info=True)
         await chaining.take_frames(generation.fail_take)
+        await retouch.splice_landed()
         for user_id in takes.waiting_user_ids():
             user = owner(user_id)
             if user is not None and user is not _UNREADABLE:

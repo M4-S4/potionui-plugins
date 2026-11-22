@@ -1,10 +1,10 @@
 # Video Producer: screenshots
 
-Twenty-four images of the plugin alone, English interface: the three that the README shows, the nine that the user guide shows, and twelve from earlier versions that no page shows. In this repository every image is stored as WebP (quality 85), converted from the JPEG and PNG captures that this page describes: sizes and crops are unchanged, and the formats given below are those of the captures.
+Twenty-five images of the plugin alone, English interface: the ten that the user guide shows, the last of which the README shows too, the three others that the README shows, and twelve from earlier versions that no page shows. In this repository every image is stored as WebP (quality 85), converted from the JPEG and PNG captures that this page describes: sizes and crops are unchanged, and the formats given below are those of the captures.
 
 ## User guide
 
-These nine images were taken on 18 November 2026 on a development instance of PotionUI that served the `dev` branch of the fork, with Video Producer at the same commit, in the dark theme, in a browser viewport of 1440 x 900 at a device scale of 1. The five full-window images are the whole viewport; the four others are crops of it around the window, drawer or popover they show, without reduction.
+The first nine images of the table were taken on 18 November 2026 on a development instance of PotionUI that served the `dev` branch of the fork, with Video Producer at the same commit, in the dark theme, in a browser viewport of 1440 x 900 at a device scale of 1. The five full-window images are the whole viewport; the four others are crops of it around the window, drawer or popover they show, without reduction.
 
 The project is the starter project "Lumi’s potion", made by the plugin's own code for a test account and stored on the instance under a test name, then opened in the page. Nothing was generated: the project has no take, and the engine of the project was set to MiniMax H3 (12 GB) in the **Generation settings** drawer. One thing is staged: the browser wrote "Lumi’s potion" over the test name in the project bar and in the file name of the export window, just before each capture. The estimate is the instance's own, measured on 20 earlier takes of that preset.
 
@@ -19,6 +19,9 @@ The project is the starter project "Lumi’s potion", made by the plugin's own c
 | [guide-estimate-dark](guide-estimate-dark.webp) | 640 x 281. The **Estimate details** of shot 1 over the production deck: one shot, two takes in 832x480, the time measured on earlier takes of the preset, the memory, and two warnings: no linked frame, and the model streams through host RAM. |
 | [guide-mix-dark](guide-mix-dark.webp) | 1440 x 900. Mix: no sound in the project yet, and the console with the strip of the shots, the four empty audio tracks, the reverb and delay buses and the master. |
 | [guide-export-dark](guide-export-dark.webp) | 600 x 770. The **Export and share** window opened with Ctrl+E, on its **Video** tab: the warning that the four shots are not final yet, the format, the resolution, the sound options and the finishing, all off. Nothing was exported. |
+| [guide-retouch-dark](guide-retouch-dark.webp) | 776 x 433. The viewer with the **Retouch a range** bar open on draft A of a shot, on **Refine faces**: the range of one second marked on the strip, the engine MiniMax-H3 (12 GB), the strength **Balanced**, faces and hands on, and **Retouch range**. Nothing was generated. |
+
+The tenth, `guide-retouch-dark`, was taken on 22 November 2026 on the same development instance, which then served the files of version 0.8.0 of the plugin but for its version number, in the dark theme, in a browser viewport of 1440 x 900 at a device scale of 1, as a crop of the viewer at its size, without reduction. The project is a test project of the instance with five shots of a fisherman in a harbour and finished takes; the take is draft A of its second shot. One thing is staged: the browser wrote English names over the French names of the project and of its shots just before the capture. The browser blocked every request that would have started a generation; none was sent.
 
 ## Starter project
 

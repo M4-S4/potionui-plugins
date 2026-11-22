@@ -208,7 +208,7 @@ export function canUpscale(take, me) {
 }
 
 export function takeAsset(take, name) {
-	const origin = take.generationId && take.fileId ? { kind: 'history', generationId: take.generationId, fileId: take.fileId } : null;
+	const origin = take.origin ?? (take.generationId && take.fileId ? { kind: 'history', generationId: take.generationId, fileId: take.fileId } : null);
 	const width = Number.isInteger(take.width) ? take.width : null;
 	const height = Number.isInteger(take.height) ? take.height : null;
 	return {
