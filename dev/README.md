@@ -29,7 +29,7 @@ Every text file is stored with LF line endings (`.gitattributes`), whatever `cor
 
 ## The pinned core
 
-`dev/core.ref` holds the PotionUI commit that the CI and the releases check out from the official repository, PotionUI/PotionUI. Every core change that Video Producer needs is merged there, so it is a commit of its `master` branch: today the commit that the tag `v0.2.0` of release 0.2.0 names. Each catalogue entry states the PotionUI version it needs in `requires.core` (see [Catalogue](#catalogue)).
+`dev/core.ref` holds the PotionUI commit that the CI and the releases check out from the official repository, PotionUI/PotionUI. Every core change that Video Producer needs is merged there, so it is a commit of its `master` branch: today the commit that the tag `v0.3.0` of release 0.3.0 names. Each catalogue entry states the PotionUI version it needs in `requires.core` (see [Catalogue](#catalogue)).
 
 ## Day-to-day work
 
