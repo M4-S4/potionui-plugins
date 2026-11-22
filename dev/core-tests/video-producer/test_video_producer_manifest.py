@@ -1902,6 +1902,9 @@ class _Picture:
     def resize(self, size, _resampling):
         return _Picture(size)
 
+    def crop(self, box):
+        return _Picture((box[2] - box[0], box[3] - box[1]))
+
 
 def test_the_size_the_plugin_reckons_for_a_reference_photo_is_the_one_the_core_encodes_it_at():
     from PIL import Image
