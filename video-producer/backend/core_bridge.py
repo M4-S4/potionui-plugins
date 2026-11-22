@@ -318,9 +318,14 @@ async def extract_frame(user: User, ref: Mapping[str, Any], at: Any = "last") ->
     return dict(await api_media.extract_frame(user, dict(ref), at=at))
 
 
-async def save_user_media(user: User, path: Path) -> Dict[str, Any]:
+DERIVED_PURPOSE = "derived_artifact"
+
+
+async def save_user_media(user: User, path: Path, purpose: Optional[str] = None) -> Dict[str, Any]:
     """Store a file the plugin wrote as the user's upload; raises MediaRefError."""
-    return dict(await api_media.save_user_media(user, Path(path)))
+    if purpose is None:
+        return dict(await api_media.save_user_media(user, Path(path)))
+    return dict(await api_media.save_user_media(user, Path(path), purpose=purpose))
 
 
 def storage_directory() -> Path:

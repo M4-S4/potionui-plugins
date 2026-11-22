@@ -7,7 +7,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Collection, Dict, List, Mapping, Optional, Sequence, Set, Tuple
 
-from . import bible, catalog, core_bridge, dialogue, encoder, engine_options, formats, framefit, keepframing, models, presets, reception, sequence, settings, upscalers, workdir
+from . import bible, catalog, core_bridge, dialogue, encoder, engine_options, formats, framefit, keepframing, models, presets, reception, sequence, settings, takes, upscalers, workdir
 from .catalog import FL2VA, PROFILES, REF2VA, REFS_MODE
 from .core_bridge import CLOUD_ENGINE, DirectorBindingError, MediaRefError, User
 
@@ -2619,6 +2619,9 @@ def _build(
 
 
 def source_ref(user: User, take: Mapping[str, Any]) -> Dict[str, str]:
+    own = takes.media_ref(take)
+    if own is not None and own["kind"] == "library":
+        return own
     generation_id = take.get("generation_id")
     try:
         files = core_bridge.list_generation_files(user, generation_id) if generation_id else []

@@ -73,6 +73,7 @@ class World:
         self.app, self.client, self.core, self.store, self.make_user = app, client, core, store, make_user
         core.use_wan()
         core.use_seedvr2()
+        core.use_h3_retouch()
         monkeypatch.setattr(video, "assemble", self._assemble)
         monkeypatch.setattr(core_bridge, "find_ffmpeg", lambda: "/usr/bin/ffmpeg")
         monkeypatch.setattr(core_bridge, "find_ffprobe", lambda: "/usr/bin/ffprobe")
@@ -82,6 +83,7 @@ class World:
         monkeypatch.setattr(export_media.Resolver, "local", lambda resolver, found, folder: Path(folder) / "source.mp4")
         monkeypatch.setattr(core_bridge, "probe_video", lambda path: None)
         monkeypatch.setattr(core_bridge, "save_user_media", self._save_user_media)
+        monkeypatch.setattr(core_bridge, "local_media_file", self._local_media_file)
         monkeypatch.setattr(frame_grab, "run", self._run)
         monkeypatch.setattr(core_bridge, "resolve_media", self._resolve_as_owner(core.resolve_media))
         monkeypatch.setattr(core_bridge, "prompt_writer_status", lambda user_id: {"available": True, "vision": True, "name": "Writer", "code": None, "message": None})
@@ -115,7 +117,13 @@ class World:
         Path(command[-1]).write_bytes(b"png")
 
     @staticmethod
-    async def _save_user_media(user, path):
+    def _local_media_file(user, ref, folder):
+        path = Path(folder) / "source.mp4"
+        path.write_bytes(b"mp4")
+        return path
+
+    @staticmethod
+    async def _save_user_media(user, path, purpose=None):
         stored = {"kind": "library", "item_id": f"item-{user.id}"}
         return {"value": "uploads/frame.png", "media_type": "image", "original_filename": Path(path).name, "origin": None, "ref": stored, "width": 832, "height": 480}
 
@@ -366,6 +374,20 @@ ROUTES = {
             f"/projects/{w.pid}/takes/{w.done['id']}/final", {"method": "upscale", "target": "fhd1080"}, 404, "project_not_found", "user-2"
         ),
         invalid=lambda w: Call(f"/projects/{w.pid}/takes/{w.done['id']}/final", {"method": "upscale", "target": "8k"}, 422, "invalid_request"),
+    ),
+    "GET /retouch/offers": Route(
+        success=lambda w: Call("/retouch/offers", check=lambda r: [offer["task"] for offer in _data(r)["offers"]] == ["refine_faces", "remix"]),
+        denied=lambda w: Call("/retouch/offers", status=401, who=ANONYMOUS),
+    ),
+    "POST /projects/{id}/takes/{take}/retouch": Route(
+        success=lambda w: Call(
+            f"/projects/{w.pid}/takes/{w.done['id']}/retouch", {"task": "refine_faces", "start_s": 1.0, "end_s": 2.0}, 202,
+            check=lambda r: (_data(r)["take"]["kind"], _data(r)["take"]["parent_take_id"]) == ("retouch", w.done["id"]),
+        ),
+        denied=lambda w: Call(
+            f"/projects/{w.pid}/takes/{w.done['id']}/retouch", {"task": "refine_faces", "start_s": 1.0, "end_s": 2.0}, 404, "project_not_found", "user-2"
+        ),
+        invalid=lambda w: Call(f"/projects/{w.pid}/takes/{w.done['id']}/retouch", {"task": "refine_faces", "start_s": 1.0, "end_s": 2.0, "faces": "yes"}, 422, "invalid_request"),
     ),
     "POST /projects/{id}/final-pass/estimate": Route(
         success=lambda w: Call(

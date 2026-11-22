@@ -5,6 +5,7 @@ from typing import Any, Dict, Iterable, Mapping, Optional, Tuple
 from urllib.parse import unquote
 
 from .. import core_bridge
+from .. import takes as take_store
 from ..core_bridge import MediaRefError, User
 from ..routes_media import ORIGIN_KEYS
 from .common import asset_of, clip_label, word_safe
@@ -56,6 +57,13 @@ def history_ref(record: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
 
 def history_file(record: Mapping[str, Any]) -> Found:
     return Found(basename(record["file_path"]), "history", record["file_path"], history_ref(record))
+
+
+def take_file(take: Mapping[str, Any]) -> Found:
+    ref = take_store.media_ref(take)
+    if ref is not None and ref["kind"] == "library":
+        return Found(basename(take["file_path"]), "library", take["file_path"], ref)
+    return history_file(take)
 
 
 class Resolver:
@@ -123,7 +131,7 @@ def locate(asset: Mapping[str, Any], takes: Iterable[Mapping[str, Any]], resolve
     """Where an asset's file is: its take, the media its origin resolves to, or only the name in its URL."""
     take = take_of(asset, takes)
     if take is not None:
-        return history_file(take)
+        return take_file(take)
     ref = core_ref(asset.get("origin") or {})
     if ref is not None:
         try:

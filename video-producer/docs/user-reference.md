@@ -595,7 +595,9 @@ Two words are easy to mix up, so here they are once: a take is **Selected** when
 - On a take in progress, **Cancel** stops it. On a failed one, **Retry** starts a new take.
 - Under a take that is not in progress, **Reject**, **Candidate** and **Selected** set its label (see Labels).
 
-For a one-off retouch of a take (a free crop, a speed-up, an effect), open it from **History**: in the take's **Tools** menu, choose **Edit**, then the tool you need. The take opens in PotionUI's Video editor with that tool ready. Saving puts the result in your library, and **Import › From the library…** brings it into the project.
+To fix part of a take without generating the whole shot again, open the take and choose **Retouch a range** (the wand on its card, or **Shot › Retouch a range of the take…**). Mark the section with the handles or with **I** and **O**, pick **Refine faces** or **Remix**, and start it. The result is a new take of the same shot, with the same length and sound; the original take stays as it is, and you choose which one the cut uses. See Retouching a range of a take below.
+
+For any other one-off change to a take (a free crop, a speed-up, an effect), open it from **History**: in the take's **Tools** menu, choose **Edit**, then the tool you need. The take opens in PotionUI's Video editor with that tool ready. Saving puts the result in your library, and **Import › From the library…** brings it into the project.
 
 ### Labels
 
@@ -626,6 +628,20 @@ Projects made before the labels keep their marks: a chosen take is **Selected**,
 What an upscale needs, as you see it. The upscalers are presets that your administrator installs and assigns: **SeedVR2** (slow, restores detail) and **RTX Upscale** (fast; it also needs a recent NVIDIA setup on the server). They run on a native backend of your PotionUI, this machine or a remote worker. When no upscaler is assigned to you, the window shows the badge **Upscaler not available** and the explanation "Upscaling this take needs SeedVR2 or RTX Upscale: ask an administrator to install one, or generate the take again at full resolution." (the **Final render…** button of that take card shows the same sentence as its tooltip), the resolutions are greyed and only the re-render is offered. When only cloud backends are enabled, the sentence is "SeedVR2, RTX Upscale, the interpolators and the guided render run on a native backend of this instance, and none is enabled: takes run in the cloud only. Ask an administrator to enable the native backend of this machine or a remote worker." A take of the base MiniMax H3 preset does not need SeedVR2, as long as its preset is assigned to you. An upscale with SeedVR2 takes time: count hours for a 5-second take to 1080p on a 12 GB graphics card.
 
 The new take is a **Final** one ("Final quality", "Final quality · upscale" or "Final quality · guided" on its card) that says which draft it comes from ("from A"). You get "Upscale to the film's size started" (or "Upscale to 1080p started"), "Render at 1280×720 started" or "Guided render at 1280×704 started", the final render appears on the card list when it ends, and it is put on the shot ("Final version ready and applied to the shot"). A final render uses GPU minutes like any take and is checked against your quota; the minutes are reserved before the take is created, and a request that cannot reserve them is refused with nothing created.
+
+### Retouching a range of a take
+
+A finished take can be corrected on a section only. **Retouch a range** (the wand of the take card, or **Shot › Retouch a range of the take…** for the take you preview or the one the selected shot plays) opens the take in the viewer with the **Retouch a range** bar under the picture.
+
+- **The range.** Drag the two handles on the strip of the take, or press **I** and **O** at the playhead while the bar is open; the arrow keys move a focused handle by one frame. The range snaps to whole frames and plays in a loop. Its chip gives the start, the end, the length and the number of frames.
+- **Refine faces** repaints the faces and hands found in the range with a light MiniMax-H3 pass and leaves everything else as it is. Choose the **Strength** (Light, Balanced, Strong) and whether it works on **Faces**, **Hands** or both. It needs PotionUI's face and hand detection models on the server, listed among its models; when PotionUI does not list them, the bar names the files and asks an administrator to scan the models (Admin › Models), then to install them if they are still missing, and the button stays off.
+- **Remix** re-creates the range with a change you write in English ("make it snow"), keeping its camera, motion and timing. With the 12 GB engines it works on 1 to 3 seconds.
+- **Engine** lists the presets of Video Producer that offer the task to you: MiniMax-H3 (12 GB) for both, MiniMax-H3-Fast (12 GB) for Refine faces. Any finished take can be retouched, whatever engine made it.
+- **Retouch range** starts it (**Ctrl+Enter**; **Esc** closes the bar). It joins the queue like any take: a new card "Refine faces · from B" or "Remix · from B" shows its progress, and **Cancel** stops it. One result is made per run.
+- Outside the range the new take has the frames of the original, and its sound is the sound of the original take from start to end. Its length is the same, so the cut, the fades and the cross-dissolves of the shot do not move when you use it.
+- When the retouch is finished, **Compare with B** on its card shows both takes side by side with the range marked. **Use C in the cut** makes it the take of the shot, **Keep B** closes the comparison, and **Retouch C again** opens the bar on the new take: a retouched take can be retouched again.
+- When the range reaches the end of the take and the next shot started from its last frame, the bar warns that the seam may show; nothing is generated again by itself.
+- The range is cut sharply: the frames before and after it are the original ones.
 
 ### The frame rate of the takes
 

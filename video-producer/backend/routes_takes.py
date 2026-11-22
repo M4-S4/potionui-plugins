@@ -2,7 +2,7 @@ from typing import Any, Dict, NoReturn
 
 from fastapi import APIRouter, Body, Depends
 
-from . import access, generation, keyframes, takes, tracker, upscalers
+from . import access, generation, keyframes, retouch, takes, tracker, upscalers
 from .core_bridge import User, get_current_active_user
 from .generation import Blocked, TakeError
 from .responses import fail, ok
@@ -138,6 +138,34 @@ async def final_take(
     return ok({"take": takes.public(take)})
 
 
+@router.get("/retouch/offers")
+def retouch_offers(user: User = Depends(get_current_active_user)) -> Dict[str, Any]:
+    return ok({"offers": retouch.offers(user)})
+
+
+@router.post("/projects/{project_id}/takes/{take_id}/retouch", status_code=202)
+async def retouch_take(
+    project_id: str, take_id: str, body: Any = Body(default=None), user: User = Depends(get_current_active_user)
+) -> Dict[str, Any]:
+    body = _object(body)
+    for key in ("faces", "hands"):
+        if key in body and not isinstance(body[key], bool):
+            _invalid(f"{key} must be true or false.")
+    for key in ("task", "preset_id", "prompt", "strength"):
+        if body.get(key) is not None and not isinstance(body[key], str):
+            _invalid(f"{key} must be a string.")
+    project = access.project_for(user, project_id)
+    source = access.take_in(project, take_id)
+    try:
+        take = await retouch.start(access.owner_of(user, project), project, source, body)
+    except Blocked as exc:
+        blocked(exc)
+    except TakeError as exc:
+        take_error(exc)
+    tracker.ensure_running()
+    return ok({"take": takes.public(take)})
+
+
 @router.post("/takes/{take_id}/cancel")
 async def cancel_take(take_id: str, user: User = Depends(get_current_active_user)) -> Dict[str, Any]:
     """Cancel a queued or running take and refund its minutes."""
@@ -149,7 +177,7 @@ async def cancel_take(take_id: str, user: User = Depends(get_current_active_user
 async def retry_take(take_id: str, user: User = Depends(get_current_active_user)) -> Dict[str, Any]:
     """Start a new take like a failed or cancelled one, with the same shot, seed, quality and preset; a start image candidate with the same request."""
     source, project = access.take_for(user, take_id)
-    again = keyframes.retry if source["kind"] == takes.KEYFRAME else generation.retry
+    again = keyframes.retry if source["kind"] == takes.KEYFRAME else retouch.retry if source["kind"] == takes.RETOUCH else generation.retry
     try:
         take = await again(access.owner_of(user, project), project, source)
     except Blocked as exc:

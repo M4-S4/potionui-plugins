@@ -1,0 +1,23 @@
+fields:
+  - name: "speed_profile"
+    type: "select"
+    formula: "speed"
+    label: "Speed profile"
+    default: "custom"
+    ai_hint: "The face refine's own recipe is 4 steps; Custom starts there and leaves the Steps slider on the Advanced tab to the user. Distilled pins the checkpoint's fixed 8 steps."
+    configuration:
+      options:
+        - { label: "Distilled", value: "distilled", sub_label: "8 steps · fixed by the checkpoint" }
+        - { label: "Custom", value: "custom", sub_label: "4 steps by default, left alone" }
+  - type: "section"
+    label: "Video"
+    children:
+      - name: "seed"
+        type: "seed"
+        label: "Seed"
+        default: -1
+
+  - type: "section"
+    label: "Models"
+    formula: "models"
+    children: "{{ paths.preset }}/files/form/models_refine.yml"

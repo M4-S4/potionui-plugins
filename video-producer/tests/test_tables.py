@@ -12,6 +12,7 @@ _EXPECTED_COLUMNS = {
         "fps", "error_code", "error_message", "created_at", "finished_at", "director_mode", "model_id", "progress", "step",
         "variant", "chosen", "flag", "profile", "prompt_text", "file_id", "units_reserved", "started_at", "user_id",
         "request", "label", "shot_revision", "priority", "chain", "chain_wait", "frame_role", "video_refs", "track_scale", "frame_notes",
+        "retouch", "media_ref",
     ],
     "video_producer_jobs": [
         "id", "take_id", "generation_id", "limit_ref_id", "units_reserved", "started_at", "finished_at",

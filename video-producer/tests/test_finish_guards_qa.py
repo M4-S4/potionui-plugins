@@ -9,7 +9,6 @@ PLUGIN = Path(__file__).resolve().parents[1]
 I18N = PLUGIN / "frontend" / "src" / "i18n"
 SHOTS = PLUGIN / "docs" / "screenshots"
 DIST = PLUGIN / "frontend" / "dist" / "VideoProducerPage.js"
-ALLOWED_COMMENTS = {("backend/exports/video.py", "# one frame of slack: a file can end a frame before its probed length")}
 GUIDES = (PLUGIN / "docs" / "user-guide.md", PLUGIN / "docs" / "user-reference.md")
 
 
@@ -45,7 +44,7 @@ def test_every_screenshot_the_readme_cites_exists_and_every_image_is_cited():
     assert sorted(files - cited) == []
 
 
-def test_the_python_sources_hold_no_comment_but_the_one_kept_in_the_video_export():
+def test_the_python_sources_hold_no_comment():
     found = set()
     for folder in ("backend", "hooks"):
         for path in sorted((PLUGIN / folder).rglob("*.py")):
@@ -54,7 +53,7 @@ def test_the_python_sources_hold_no_comment_but_the_one_kept_in_the_video_export
                     if token.type == tokenize.COMMENT:
                         found.add((path.relative_to(PLUGIN).as_posix(), token.string))
 
-    assert found == ALLOWED_COMMENTS
+    assert found == set()
 
 
 def test_the_served_dist_keeps_no_trace_of_a_simulation():

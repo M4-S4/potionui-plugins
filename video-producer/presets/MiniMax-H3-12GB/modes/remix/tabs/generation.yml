@@ -1,0 +1,53 @@
+fields:
+  - name: "speed_profile"
+    type: "select"
+    formula: "speed"
+    label: "Speed profile"
+    default: "custom"
+    ai_hint: "Quality runs 24 steps and holds a likeness best; pick it whenever a face or outfit has to come back. Turbo runs 4 steps and drifts more. Flex runs 6 steps with the Pika Flex adapter, which needs the Flex adapter model on the Models section; it is fast, and it ignores the LoRA tab and the sampler settings. Custom hands the Steps slider on the Advanced tab to the user."
+    configuration:
+      options:
+        - { label: "Quality", value: "quality", sub_label: "24 steps" }
+        - { label: "Turbo", value: "turbo", sub_label: "4 steps" }
+        - { label: "Flex", value: "flex", sub_label: "6 steps · Flex adapter" }
+        - { label: "Custom", value: "custom", sub_label: "your own steps, left alone" }
+  - type: "section"
+    label: "Video"
+    children:
+      - type: "row"
+        children:
+          - name: "seed"
+            type: "seed"
+            label: "Seed"
+            default: -1
+            width: "3/5"
+          - name: "quantity"
+            type: "stepper"
+            label: "Quantity"
+            default: 1
+            configuration: {min: 1, max: 4, step: 1}
+            width: "2/5"
+            full_width: true
+      - name: "resolution"
+        type: "resolution"
+        formula: "size"
+        label: "Resolution"
+        ai_hint: "Both axes must be multiples of 32, aspect ratio between 1:4 and 4:1. The source video is fitted onto this canvas, so keep the size of the clip being remixed; the native canvas is past what a 12 GB card holds with a reference video."
+        configuration:
+          files:
+            - { path: "{{ paths._shared }}/resolutions/minimax_h3_canvas.yml", group: "Native canvas (768 short edge)" }
+            - { path: "{{ paths._shared }}/resolutions/minimax_h3_fast.yml", group: "Faster (below native canvas)" }
+            - { path: "{{ paths._shared }}/resolutions/minimax_h3_480p.yml", group: "480p (Flex-trained)" }
+        default: "832x480"
+      - name: "max_seconds"
+        type: "slider"
+        formula: "size"
+        label: "Max length (seconds)"
+        default: 14
+        description: "Longer videos are cut here."
+        ai_hint: "The clip follows the source video length, up to this many seconds."
+        configuration: {min: 1, max: 14, step: 0.5}
+  - type: "section"
+    label: "Models"
+    formula: "models"
+    children: "{{ paths.preset }}/files/form/models_ref2va.yml"

@@ -1,6 +1,6 @@
 import json
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 
 from .core_bridge import generate_ulid
 
@@ -18,6 +18,9 @@ LABELS = ("draft", "rejected", "candidate", "final")
 DRAFT, REJECTED, CANDIDATE, FINAL = LABELS
 
 KEYFRAME = "keyframe"
+RETOUCH = "retouch"
+RETOUCH_PUBLIC = ("task", "start_s", "end_s", "source_take_id", "preset_id", "prompt", "strength", "faces", "hands")
+UPLOADS = "uploads/"
 
 _FLAG_OF = {CANDIDATE: "keep", REJECTED: "reject"}
 
@@ -70,6 +73,8 @@ COLUMNS = (
     "video_refs",
     "frame_notes",
     "track_scale",
+    "retouch",
+    "media_ref",
 )
 
 PUBLIC = (
@@ -116,6 +121,8 @@ PUBLIC = (
     "frame_role",
     "video_refs",
     "frame_notes",
+    "retouch",
+    "origin",
 )
 
 _ACTIVE_SQL = "status IN ('queued', 'running')"
@@ -168,6 +175,8 @@ def _take(row: Any) -> Dict[str, Any]:
     take["chain_wait"] = bool(take["chain_wait"])
     take["video_refs"] = json.loads(take["video_refs"]) if take["video_refs"] else None
     take["frame_notes"] = json.loads(take["frame_notes"]) if take["frame_notes"] else None
+    take["retouch"] = json.loads(take["retouch"]) if take["retouch"] else None
+    take["media_ref"] = json.loads(take["media_ref"]) if take["media_ref"] else None
     take["track_scale"] = track_scale(take)
     return take
 
@@ -178,16 +187,50 @@ def track_scale(take: Dict[str, Any]) -> float:
     return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0 else 1.0
 
 
+def _slashed(path: Any) -> str:
+    return str(path).replace("\\", "/")
+
+
 def _basename(path: str) -> str:
-    return path.replace("\\", "/").rsplit("/", 1)[-1]
+    return _slashed(path).rsplit("/", 1)[-1]
+
+
+def media_ref(take: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
+    stored = take.get("media_ref")
+    if isinstance(stored, Mapping) and stored.get("kind") == "library" and stored.get("item_id"):
+        return {"kind": "library", "item_id": str(stored["item_id"])}
+    if take.get("generation_id") and take.get("file_id"):
+        return {"kind": "history", "generation_id": str(take["generation_id"]), "file_id": str(take["file_id"])}
+    return None
+
+
+def origin(take: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
+    ref = media_ref(take)
+    if ref is None:
+        return None
+    if ref["kind"] == "library":
+        return {"kind": "library", "itemId": ref["item_id"]}
+    return {"kind": "history", "generationId": ref["generation_id"], "fileId": ref["file_id"]}
+
+
+def _url(take: Mapping[str, Any]) -> Optional[str]:
+    path = take.get("file_path")
+    if not path:
+        return None
+    ref = media_ref(take)
+    if ref is not None and ref["kind"] == "library":
+        return f"/api/media/uploads/{_slashed(path).removeprefix(UPLOADS)}"
+    if take.get("generation_id"):
+        return f"/api/media/generations/{take['generation_id']}/{_basename(path)}"
+    return None
 
 
 def public(take: Dict[str, Any]) -> Dict[str, Any]:
     """A take as the API returns it, with the URL of its video and thumbnail."""
-    url = None
-    if take.get("generation_id") and take.get("file_path"):
-        url = f"/api/media/generations/{take['generation_id']}/{_basename(take['file_path'])}"
-    values = {**take, "url": url, "thumb_url": f"{url}?size=medium" if url and take.get("thumb_path") else None}
+    url = _url(take)
+    record = take.get("retouch")
+    shown = {key: record[key] for key in RETOUCH_PUBLIC if key in record} if isinstance(record, Mapping) else None
+    values = {**take, "url": url, "thumb_url": f"{url}?size=medium" if url and take.get("thumb_path") else None, "origin": origin(take), "retouch": shown}
     return {key: values.get(key) for key in PUBLIC}
 
 
@@ -229,6 +272,8 @@ def create_take(fields: Dict[str, Any]) -> Dict[str, Any]:
         "chain_wait": int(bool(take["chain_wait"])),
         "video_refs": json.dumps(take["video_refs"]) if take["video_refs"] else None,
         "frame_notes": json.dumps(take["frame_notes"]) if take["frame_notes"] else None,
+        "retouch": json.dumps(take["retouch"]) if take["retouch"] else None,
+        "media_ref": json.dumps(take["media_ref"]) if take["media_ref"] else None,
     }
     with db.get_cursor() as cursor:
         cursor.execute(
@@ -335,6 +380,14 @@ def update_active(take_id: str, **fields: Any) -> bool:
 def settle(take_id: str, status: str, **fields: Any) -> bool:
     """End a queued or running take; True only for the caller that ended it."""
     return _update(take_id, {**fields, "status": status}, _ACTIVE_SQL)
+
+
+def set_retouch(take_id: str, record: Mapping[str, Any]) -> bool:
+    return _update(take_id, {"retouch": json.dumps(dict(record))}, _ACTIVE_SQL)
+
+
+def land_retouch(take_id: str, record: Mapping[str, Any], step: str) -> bool:
+    return _update(take_id, {"retouch": json.dumps(dict(record)), "status": "running", "step": step, "progress": 99.0}, _ACTIVE_SQL)
 
 
 def prioritize(take: Dict[str, Any]) -> Dict[str, Any]:

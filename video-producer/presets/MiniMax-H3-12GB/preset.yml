@@ -73,6 +73,8 @@ vars:
 
   prompt:
     segment_join: "paragraph"
+    modes:
+      remix: { segment_templates: [] }
     segment_templates:
       - name: "H3 prompt document"
         description: "The three labeled fields MiniMax-H3 was trained on, in order."
@@ -284,6 +286,7 @@ prompt_syntax:
       insert: "<d>{}</d>"
       help: "Wraps a speaker's exact words, preserved verbatim"
       color: "mediumseagreen"
+  remix: []
   refs:
     - token: "subject_definitions:"
       kind: "label"
@@ -354,3 +357,5 @@ modes:
   - video
   - refs
   - extend
+  - refine_faces
+  - remix

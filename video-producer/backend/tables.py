@@ -170,6 +170,8 @@ _ADDED_COLUMNS: Tuple[Tuple[str, str, str], ...] = (
     ("video_producer_takes", "video_refs", "TEXT"),
     ("video_producer_takes", "track_scale", "REAL"),
     ("video_producer_takes", "frame_notes", "TEXT"),
+    ("video_producer_takes", "retouch", "TEXT"),
+    ("video_producer_takes", "media_ref", "TEXT"),
     ("video_producer_export_jobs", "stems", "INTEGER NOT NULL DEFAULT 0"),
     ("video_producer_export_jobs", "ratio", "TEXT"),
     ("video_producer_renditions", "factor", "INTEGER"),

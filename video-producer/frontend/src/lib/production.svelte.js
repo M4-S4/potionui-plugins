@@ -706,6 +706,24 @@ export async function prioritizeTake(take) {
 	await poll();
 }
 
+export async function sendRetouch(takeId, body) {
+	const projectId = project.id;
+	const result = await getClient().retouchTake(projectId, takeId, body);
+	if (projectId !== project.id) return null;
+	if (!result.ok) {
+		if (gone(result.error)) {
+			projectGone(projectId);
+			return null;
+		}
+		if (blockedBy(result.error)) toast(blockedText(result.error), 'warning');
+		else toast(result.error.message || t('generation.retouch.failed'), 'error');
+		return null;
+	}
+	upsertTake(result.data);
+	track();
+	return result.data;
+}
+
 export async function retryTake(take) {
 	const result = await getClient().retryTake(take.id);
 	if (!result.ok) return failed(result.error, t('generation.toast.actionFailed'));

@@ -298,7 +298,7 @@ def test_the_continue_mode_of_the_12_gb_preset_returns_the_new_footage_alone_fro
     gallery = next(step for step in pipeline if step["name"] == "gallery")
     fields = {field["name"]: field for field in yaml.safe_load(generation_tab)["fields"][1]["children"] if "name" in field}
 
-    assert manifest["modes"][-1] == "extend" and "extend" not in manifest["vars"]["video_director"]["preset_modes"]
+    assert "extend" in manifest["modes"] and "extend" not in manifest["vars"]["video_director"]["preset_modes"]
     assert generator["configuration"]["source_video_role"] == "continue" and generator["configuration"]["source_overlap_latents"] == 5
     assert generator["configuration"]["decode"] is True and "document" not in generator["configuration"]
     assert ["source_video", "source", "video"] in generator["input"]

@@ -5,7 +5,7 @@ A page of PotionUI where your users make short films with AI video, from the syn
 https://raw.githubusercontent.com/M4-S4/potionui-plugins/main/plugins.json
 ```
 
-Version 0.7.1. It needs PotionUI 0.2.0 or later. This page is for the administrator; users read **Video Producer: user guide**.
+Version 0.8.0. It needs PotionUI 0.2.0 or later. This page is for the administrator; users read **Video Producer: user guide**.
 
 1. In **Admin › Plugins**, click **Install from catalog**, paste the catalogue URL and click **Read catalog**.
 2. Click **Install** next to **Video Producer**, then **Install** in the window that asks to confirm. It arrives in the list, disabled.
@@ -93,6 +93,21 @@ Pages in **Admin › Documentation**: [setup notes](docs/setup.md), [admin refer
 ## Changes
 
 The full notes of each version are on the [releases page](https://github.com/M4-S4/potionui-plugins/releases).
+
+### What changed in 0.8.0
+
+- **Retouch a range**: a bar under the viewer fixes part of a finished take instead of the whole shot. Mark the range with its handles or with **I** and **O**, then start it: the result is a new take of the same shot, with the same length and sound, and the original take stays as it is.
+- Two tasks come from new modes of the 12 GB MiniMax-H3 presets.
+- **Refine faces** repaints the faces, the hands or both, on half a second or more, with **MiniMax-H3 (12 GB)** or **MiniMax-H3-Fast (12 GB)**.
+- **Remix** remakes 1 to 3 seconds from a change written in English, with **MiniMax-H3 (12 GB)**.
+- The bar opens from the wand of a take card or from **Shot › Retouch a range of the take…**.
+- A retouched take shows **Refine faces · from C** or **Remix · from C** and its range.
+- **Compare with C** shows both takes side by side, with **Use D in the cut**, **Keep C** and **Retouch D again**.
+- A retouched take is placed, exported, upscaled and retouched again like any other take.
+- It reserves the GPU minutes of a take as long as its range, twice that for **Remix**, and then counts the time it really took.
+- For admins: **Refine faces** needs PotionUI's MediaPipe detection models, `face_landmarker.task` and `hand_landmarker.task`, listed in **Admin › Models**, and the system libraries `libgles2` and `libegl1` on the server, which the PotionUI Docker image does not install; see the admin reference. Two new columns, `retouch` and `media_ref`, on `video_producer_takes`, made at boot or when the plugin is enabled.
+
+![The Retouch a range bar under the viewer, on Refine faces, dark theme](https://raw.githubusercontent.com/M4-S4/potionui-plugins/main/video-producer/docs/screenshots/guide-retouch-dark.webp)
 
 ### What changed in 0.7.1
 

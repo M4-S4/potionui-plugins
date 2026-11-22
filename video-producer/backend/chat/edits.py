@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
-from .. import bible, formats
+from .. import bible, formats, takes
 from ..core_bridge import generate_ulid
 from ..director import FIRST_ROLES, LAST_ROLES, shot_revision
 from ..dissolve import chained, layout, rounded
@@ -397,7 +397,7 @@ def take_asset(take: Mapping[str, Any], name: str) -> Dict[str, Any]:
     """The media of a finished take, shaped like the page's."""
     width = take.get("width") if isinstance(take.get("width"), int) else None
     height = take.get("height") if isinstance(take.get("height"), int) else None
-    origin = {"kind": "history", "generationId": take["generation_id"], "fileId": take["file_id"]} if take.get("generation_id") and take.get("file_id") else None
+    origin = takes.origin(take)
     return {
         "id": f"gen-{take['id']}",
         "kind": "video",
