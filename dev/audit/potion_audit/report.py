@@ -1614,6 +1614,32 @@ def _block(anchor: str, title: str, content: str, css: str = "") -> str:
     return f'<section class="block{" " + css if css else ""}"><h2 id="{anchor}">{escape(title)}</h2>{content}</section>'
 
 
+def parse_machine_labels(values: list[str]) -> dict[str, str]:
+    labels = {}
+    for value in values or ():
+        old, sep, new = str(value).partition("=")
+        if not sep or not old.strip() or not new.strip():
+            raise ReportError(f"--machine-label takes OLD=NEW, not {value!r}")
+        labels[old.strip()] = new.strip()
+    return labels
+
+
+def relabel_machines(labels: dict[str, str], run_sets=(), scenarios=()) -> int:
+    changed = 0
+    for run_set in run_sets:
+        if run_set is None:
+            continue
+        for run in run_set.runs:
+            if run.get("machine") in labels:
+                run["machine"] = labels[run["machine"]]
+                changed += 1
+    for scenario in scenarios:
+        if scenario is not None and scenario.data.get("machine") in labels:
+            scenario.data["machine"] = labels[scenario.data["machine"]]
+            changed += 1
+    return changed
+
+
 def same_machine(run_set: RunSet, scenario: Scenario) -> None:
     if run_set.machine != scenario.machine:
         raise ReportError(f"the matrix ran on {run_set.machine} and the scenario on {scenario.machine}: use merge")

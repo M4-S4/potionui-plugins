@@ -50,11 +50,11 @@ jobs:
         with:
           version: "0.13.5"
 
-      - name: uv sync (locked, uv-managed Python 3.13)
-        run: uv sync --locked
+      - name: uv sync (locked, uv-managed Python 3.13, with the cases group for the import tests)
+        run: uv sync --locked --group cases
 
-      - name: pytest (fake API, generated outputs)
-        run: uv run --locked pytest -q
+      - name: pytest (fake API, generated outputs, git imports of cases)
+        run: uv run --locked --group cases pytest -q
 
       - name: H.264 or its mpeg4 fallback in the FFmpeg bundled with PyAV
         run: |
