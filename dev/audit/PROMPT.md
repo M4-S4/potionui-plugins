@@ -107,6 +107,8 @@ uv run --locked potion-audit run --pack --profile PROFILE --confirm-gpu --run-id
 
 Add `--keep-bundle` to keep each export bundle next to the outputs taken from it, when someone will want to look at what the server recorded for a generation. Start it in the background and read its log now and then, not in a tight loop. It prints one line per state change, writes `run.json` and one folder per cell, and exits with 0 when every cell that ran passed, 1 on a FAIL, OOM, TIMEOUT or REJECTED cell or when it stopped, 2 when refused, 3 on Ctrl+C (the running generation is cancelled).
 
+With the `full` profile, the cells whose tier is above the memory of the GPU are played too, after all the others (see Profiles in the README): say so to `GPU_OWNER` with their number, since they may run out of memory. Add `--no-beyond-tier` to skip them.
+
 The run stops by itself after an OOM, or when the instance is not healthy or the queue is busy before a cell. Then:
 
 1. tell the operator which cell stopped it and why;

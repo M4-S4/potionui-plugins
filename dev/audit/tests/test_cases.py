@@ -1,8 +1,9 @@
 import json
+import subprocess
 
 import pytest
 
-from potion_audit.cases import ZERO_SHA, CaseFileError, build_case_set, load_cases, mode_documents, model_fields_of, size_from_label
+from potion_audit.cases import ZERO_SHA, CaseFileError, build_case_set, import_from_core, load_cases, mode_documents, model_fields_of, size_from_label
 from potion_audit.config import DEFAULT_CASES
 
 from conftest import MISSING_SHA, SDXL_SHA, WAN_DIT_SHA, WAN_ID, WAN_VAE_SHA, sample_case_set_data
@@ -173,8 +174,61 @@ def test_a_size_label_reads_as_decimal_bytes(label, expected):
 
 def test_the_case_file_of_the_pack_gives_each_mode_its_own_model():
     case_set = load_cases(DEFAULT_CASES)
-    assert case_set.source["ref"].startswith("54c51e21d")
+    assert case_set.source["ref"].startswith("c2c9e8895")
     refs = {case.name: {ref.field: ref for ref in case.models} for case in case_set.cases if case.preset_key == "MiniMax-H3"}
     assert refs["minimax-h3-ref2va-fast"]["model"].filename == "minimax_h3_ref2va_pruned_fp8_scaled.safetensors"
     assert refs["minimax-h3-t2va-fast"]["model"].filename == "minimax_h3_fl2va_pruned_fp8_scaled.safetensors"
     assert len(refs["minimax-h3-ref2va-fast"]["model"].alternatives) == 2
+
+
+def _repo(root, files: dict) -> str:
+    root.mkdir(parents=True)
+    for name, text in files.items():
+        path = root / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8", newline="\n")
+    for args in (["init", "-q"], ["add", "-A"], ["-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-q", "-m", "c"]):
+        subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True)
+    return subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD"], check=True, capture_output=True, text=True).stdout.strip()
+
+
+def _preset_files(prefix: str, preset_id: str, case: str) -> dict:
+    return {
+        f"{prefix}/preset.yml": f"id: {preset_id}\nname: {preset_id}\nrequires:\n  min_vram_gb: 8\n",
+        f"{prefix}/modes/video/form.yml": "fields:\n  - name: model\n    type: model\n",
+        f"{prefix}/tests.yml": f"cases:\n  - name: {case}\n    mode: video\n    models:\n      model:\n        sha256: \"{'a' * 64}\"\n",
+    }
+
+
+def test_an_import_takes_the_plugin_presets_of_a_plugins_repository(tmp_path):
+    pytest.importorskip("yaml")
+    core_files = {
+        **_preset_files("content/presets/marketplace/Core1", "core-1", "core-case"),
+        **_preset_files("content/plugins/marketplace/video-producer/presets/Old", "old-vp", "old-case"),
+        **_preset_files("content/plugins/marketplace/other/presets/Kept", "kept", "kept-case"),
+        "content/plugins/marketplace/video-producer/recipes/old.yml": "id: old\nartifacts: []\n",
+    }
+    core_sha = _repo(tmp_path / "core", core_files)
+    plugins_sha = _repo(
+        tmp_path / "plugins",
+        {
+            "video-producer/manifest.yml": "id: video-producer\n",
+            **_preset_files("video-producer/presets/New", "new-vp", "new-case"),
+            "video-producer/recipes/new.yml": "id: new\nartifacts: []\n",
+            "dev/presets/Stray/preset.yml": "id: stray\n",
+        },
+    )
+    data = import_from_core(tmp_path / "core", core_sha, "core", tmp_path / "plugins", plugins_sha, "plugins")
+    assert {(item["origin"], item["key"]) for item in data["presets"]} == {("core", "Core1"), ("plugin:other", "Kept"), ("plugin:video-producer", "New")}
+    assert [case["name"] for case in data["cases"]] == ["core-case", "kept-case", "new-case"]
+    assert [recipe["path"] for recipe in data["recipes"]] == ["video-producer/recipes/new.yml"]
+    assert data["source"] == {"label": "core", "ref": core_sha, "plugins": {"label": "plugins", "ref": plugins_sha, "plugins": ["video-producer"]}}
+    alone = import_from_core(tmp_path / "core", core_sha, "core")
+    assert "plugins" not in alone["source"]
+    assert {item["key"] for item in alone["presets"]} == {"Core1", "Old", "Kept"}
+
+
+def test_an_import_refuses_a_plugins_repository_without_its_commit(tmp_path):
+    pytest.importorskip("yaml")
+    with pytest.raises(CaseFileError, match="go together"):
+        import_from_core(tmp_path, "HEAD", "core", tmp_path, None)

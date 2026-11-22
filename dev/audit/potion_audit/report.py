@@ -33,7 +33,7 @@ AUDIO = (".wav", ".mp3", ".flac", ".ogg", ".m4a")
 HOME_PATTERNS = (re.compile(r"[A-Za-z]:[\\/]+Users[\\/]+[^\\/]+"), re.compile(r"/home/[^/]+"), re.compile(r"/Users/[^/]+"))
 MARKUP = re.compile(r"<<[A-Z_]+:([^>]*)>>")
 SAFE = re.compile(r"[^A-Za-z0-9._-]+")
-VERDICT_CLASS = {"PASS": "ok", "FAIL": "bad", "OOM": "bad", "TIMEOUT": "bad", "REJECTED": "bad", "STOPPED": "warn"}
+VERDICT_CLASS = {"PASS": "ok", "FAIL": "bad", "OOM": "oom", "TIMEOUT": "slow", "REJECTED": "bad", "STOPPED": "warn"}
 STATUS_CLASS = {
     "model_missing": "warn",
     "model_unresolved": "warn",
@@ -41,20 +41,46 @@ STATUS_CLASS = {
     "request_error": "bad",
     "preset_not_installed": "warn",
     "mode_missing": "warn",
+    "beyond_tier": "beyond",
+    "ready_beyond_tier": "beyond",
 }
+BEYOND_STATUSES = {"beyond_tier", "ready_beyond_tier"}
 
+OKABE_ITO = {
+    "orange": "230 159 0",
+    "sky_blue": "86 180 233",
+    "bluish_green": "0 158 115",
+    "yellow": "240 228 66",
+    "blue": "0 114 178",
+    "vermillion": "213 94 0",
+    "reddish_purple": "204 121 167",
+    "black": "0 0 0",
+}
+STATUS_TOKENS = (
+    f"--ok: {OKABE_ITO['bluish_green']}; --on-ok: 0 0 0; --bad: {OKABE_ITO['vermillion']}; --on-bad: 0 0 0; --oom: {OKABE_ITO['reddish_purple']}; --on-oom: 0 0 0; "
+    f"--slow: {OKABE_ITO['orange']}; --on-slow: 0 0 0; --warn: {OKABE_ITO['yellow']}; --on-warn: 0 0 0; --beyond: {OKABE_ITO['blue']}; --on-beyond: 255 255 255; "
+    f"--info: {OKABE_ITO['sky_blue']}; --on-info: 0 0 0; --idle: {OKABE_ITO['black']}; --on-idle: 255 255 255; "
+)
 DARK = (
     "color-scheme: dark; --bg: 12 13 15; --card: 22 24 28; --soft: 31 33 38; --raised: 39 42 49; --line: 36 38 44; --line-strong: 43 46 53; --line-hover: 58 62 71; "
-    "--fg: 232 234 237; --muted: 169 174 184; --subtle: 122 128 144; --signal: 91 157 255; --ok: 61 214 140; --bad: 255 138 138; --warn: 255 197 61; --idle: 169 174 184; "
-    "--tint: .12; --selection: .35; --shadow-raised: inset 0 1px 0 rgb(255 255 255 / .04); --shadow-floating: inset 0 1px 0 rgb(255 255 255 / .06), 0 4px 16px rgb(0 0 0 / .5);"
+    f"--fg: 232 234 237; --muted: 169 174 184; --subtle: 140 146 160; --signal: {OKABE_ITO['sky_blue']}; --edge: 232 234 237; {STATUS_TOKENS}"
+    "--tint: .14; --selection: .35; --shadow-raised: inset 0 1px 0 rgb(255 255 255 / .04); --shadow-floating: inset 0 1px 0 rgb(255 255 255 / .06), 0 4px 16px rgb(0 0 0 / .5);"
 )
 LIGHT = (
     "color-scheme: light; --bg: 247 247 247; --card: 255 255 255; --soft: 241 241 241; --raised: 255 255 255; --line: 232 232 232; --line-strong: 214 214 214; --line-hover: 173 173 173; "
-    "--fg: 23 23 23; --muted: 85 85 85; --subtle: 112 112 112; --signal: 13 116 206; --ok: 26 127 78; --bad: 198 47 52; --warn: 154 103 0; --idle: 85 85 85; "
-    "--tint: .06; --selection: .22; --shadow-raised: 0 1px 2px rgb(0 0 0 / .04); --shadow-floating: 0 4px 12px rgb(0 0 0 / .08), 0 1px 3px rgb(0 0 0 / .06);"
+    f"--fg: 23 23 23; --muted: 85 85 85; --subtle: 105 105 105; --signal: {OKABE_ITO['blue']}; --edge: 23 23 23; {STATUS_TOKENS}"
+    "--tint: .10; --selection: .22; --shadow-raised: 0 1px 2px rgb(0 0 0 / .04); --shadow-floating: 0 4px 12px rgb(0 0 0 / .12), 0 1px 3px rgb(0 0 0 / .08);"
 )
+STATUS_NAMES = ("ok", "bad", "oom", "slow", "warn", "beyond", "info", "idle")
+GLYPHS = {"ok": "\\2713", "bad": "\\2715", "oom": "\\25C6", "slow": "\\25F7", "warn": "!", "beyond": "\\25B2", "info": "\\2192", "idle": "\\2013", "off": "\\25CB"}
 SANS = '-apple-system, BlinkMacSystemFont, "Segoe UI Variable", "Segoe UI", system-ui, Roboto, "Helvetica Neue", Arial, sans-serif'
 MONO = '"IBM Plex Mono", ui-monospace, SFMono-Regular, "Cascadia Mono", Menlo, Consolas, monospace'
+STATUS_STYLE = "".join(
+    f".tag.{name} {{ color: rgb(var(--on-{name})); background: rgb(var(--{name})); border-color: rgb(var(--edge) / .55); }}\n"
+    f".tag.{name}::before {{ content: \"{GLYPHS[name]}\"; }}\n"
+    f".cell.{name}, .note.{name}, .bar .{name} {{ --mark: var(--{name}); }}\n"
+    for name in STATUS_NAMES
+) + f'.tag.off::before {{ content: "{GLYPHS["off"]}"; }}\n'
 
 STYLE = (
     f":root {{ {DARK} --sans: {SANS}; --mono: {MONO}; }}\n"
@@ -63,7 +89,7 @@ STYLE = (
     f":root[data-theme=\"dark\"] {{ {DARK} }}\n"
     + """
 * { box-sizing: border-box; }
-html { scroll-padding-top: 64px; background: rgb(var(--bg)); }
+html { scroll-padding-top: 112px; background: rgb(var(--bg)); }
 body { background: rgb(var(--bg)); color: rgb(var(--fg)); font: 13px/20px var(--sans); margin: 0; -webkit-font-smoothing: antialiased; }
 ::selection { background: rgb(var(--signal) / var(--selection)); }
 .page { max-width: 1280px; margin: 0 auto; padding: 0 16px 64px; }
@@ -78,12 +104,12 @@ nav.toc { position: sticky; top: 0; z-index: 5; display: flex; align-items: cent
 nav.toc::-webkit-scrollbar { display: none; }
 nav.toc a { white-space: nowrap; text-decoration: none; color: rgb(var(--muted)); font-size: 13px; font-weight: 500; padding: 6px 10px; border-radius: 4px; }
 nav.toc a:hover { color: rgb(var(--fg)); background: rgb(var(--soft)); text-decoration: none; }
-nav.toc a.current { color: rgb(var(--signal)); background: rgb(var(--signal) / .12); }
+nav.toc a.current { color: rgb(var(--fg)); background: rgb(var(--signal) / .16); box-shadow: inset 0 -2px 0 rgb(var(--signal)); }
 nav.toc button.theme { margin-left: auto; flex: none; font: 500 11px/16px var(--mono); text-transform: uppercase; letter-spacing: .07em; color: rgb(var(--muted)); background: rgb(var(--soft)); border: 1px solid rgb(var(--line-strong)); border-radius: 4px; padding: 5px 10px; cursor: pointer; }
 nav.toc button.theme:hover { color: rgb(var(--fg)); border-color: rgb(var(--line-hover)); }
 a { color: rgb(var(--signal)); text-decoration: none; }
 a:hover { text-decoration: underline; }
-a:focus-visible, summary:focus-visible, button:focus-visible { outline: 2px solid rgb(var(--signal)); outline-offset: 2px; }
+a:focus-visible, summary:focus-visible, button:focus-visible, select:focus-visible { outline: 2px solid rgb(var(--signal)); outline-offset: 2px; }
 section.block { margin-top: 40px; }
 h2 { font-size: 20px; line-height: 28px; font-weight: 600; margin: 0 0 14px; padding-bottom: 10px; border-bottom: 1px solid rgb(var(--line)); }
 h3 { font: 500 12px/16px var(--mono); text-transform: uppercase; letter-spacing: .07em; color: rgb(var(--subtle)); margin: 22px 0 8px; }
@@ -92,16 +118,16 @@ code { font: 12px var(--mono); }
 .card { background: rgb(var(--card)); border: 1px solid rgb(var(--line)); border-radius: 6px; padding: 16px; box-shadow: var(--shadow-raised); }
 .card > h3:first-child { margin-top: 0; }
 .card > ul { margin: 0; }
-.facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px 24px; margin: 0; }
+.facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px 24px; margin: 0; }
 .facts div { min-width: 0; }
 .facts dt { font: 500 11px/16px var(--mono); text-transform: uppercase; letter-spacing: .07em; color: rgb(var(--subtle)); }
 .facts dd { margin: 2px 0 0; overflow-wrap: anywhere; }
 .headline { font-size: 16px; line-height: 24px; font-weight: 600; margin: 0 0 14px; }
 .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
 .tile { background: rgb(var(--card)); border: 1px solid rgb(var(--line)); border-radius: 6px; padding: 14px 16px; min-width: 0; box-shadow: var(--shadow-raised); }
-.tile.t-ok { box-shadow: inset 0 2px 0 rgb(var(--ok)), var(--shadow-raised); }
-.tile.t-bad { box-shadow: inset 0 2px 0 rgb(var(--bad)), var(--shadow-raised); }
-.tile.t-warn { box-shadow: inset 0 2px 0 rgb(var(--warn)), var(--shadow-raised); }
+.tile.t-ok { box-shadow: inset 0 3px 0 rgb(var(--ok)), var(--shadow-raised); }
+.tile.t-bad { box-shadow: inset 0 3px 0 rgb(var(--bad)), var(--shadow-raised); }
+.tile.t-warn { box-shadow: inset 0 3px 0 rgb(var(--slow)), var(--shadow-raised); }
 .tile.wide { grid-column: 1 / -1; }
 .tile.wide ul { columns: 2 22em; column-gap: 28px; }
 .tile.wide li { break-inside: avoid; }
@@ -113,6 +139,9 @@ code { font: 12px var(--mono); }
 .tile ul { margin: 6px 0 0; padding-left: 18px; }
 .tile li { overflow-wrap: anywhere; }
 .tile .tag, .group h3 .tag { margin: 2px 2px 0 0; }
+.bar { display: flex; height: 14px; border-radius: 3px; overflow: hidden; margin: 8px 0 6px; border: 1px solid rgb(var(--edge) / .55); background: rgb(var(--soft)); }
+.bar span { background: rgb(var(--mark)); min-width: 3px; }
+.bar span + span { border-left: 2px solid rgb(var(--card)); }
 .scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid rgb(var(--line)); border-radius: 6px; background: rgb(var(--card)); box-shadow: var(--shadow-raised); }
 table { border-collapse: collapse; width: 100%; }
 th, td { border-bottom: 1px solid rgb(var(--line)); padding: 8px 10px; text-align: left; vertical-align: top; }
@@ -130,28 +159,20 @@ table.matrix.by-preset { width: 100%; }
 table.matrix.by-preset td:first-child { width: 180px; }
 .modes { display: flex; flex-wrap: wrap; gap: 6px; }
 .modes .cell { margin: 0; }
-.cell { display: block; text-decoration: none; color: inherit; border: 1px solid rgb(var(--line)); border-radius: 4px; padding: 7px; margin-bottom: 4px; overflow-wrap: anywhere; }
-a.cell:hover { text-decoration: none; border-color: rgb(var(--line-hover)); }
+.cell { --mark: var(--line-hover); position: relative; display: block; text-decoration: none; color: inherit; background: rgb(var(--card)); border: 1px solid rgb(var(--line-strong)); border-left: 5px solid rgb(var(--mark)); border-radius: 4px; padding: 7px 7px 7px 8px; margin-bottom: 4px; overflow-wrap: anywhere; }
+a.cell:hover { text-decoration: none; border-color: rgb(var(--line-hover)); border-left-color: rgb(var(--mark)); background: rgb(var(--soft)); }
+a.cell.current { outline: 2px solid rgb(var(--signal)); outline-offset: 1px; background: rgb(var(--signal) / .10); }
 .cell .mode { font-size: 12px; line-height: 16px; font-weight: 600; margin-bottom: 4px; }
-.cell .nums { font-family: var(--mono); font-size: 11px; font-variant-numeric: tabular-nums; }
-.cell img { display: block; width: 120px; height: 74px; object-fit: cover; border-radius: 4px; margin-top: 6px; background: rgb(var(--soft)); }
-.tag { display: inline-block; font: 500 11px/16px var(--mono); letter-spacing: .02em; padding: 0 6px; border: 1px solid rgb(var(--line-strong)); border-radius: 4px; white-space: nowrap; color: rgb(var(--muted)); background: rgb(var(--soft)); }
-.cell.ok { background: rgb(var(--ok) / var(--tint)); border-color: rgb(var(--ok) / .28); }
-.cell.bad { background: rgb(var(--bad) / var(--tint)); border-color: rgb(var(--bad) / .32); }
-.cell.warn { background: rgb(var(--warn) / var(--tint)); border-color: rgb(var(--warn) / .32); }
-.cell.idle { background: rgb(var(--soft)); }
-.cell.off { background: none; border: 1px dashed rgb(var(--line-hover)); }
-.ok .tag, .tag.ok { color: rgb(var(--ok)); border-color: rgb(var(--ok) / .4); background: rgb(var(--ok) / var(--tint)); }
-.bad .tag, .tag.bad { color: rgb(var(--bad)); border-color: rgb(var(--bad) / .45); background: rgb(var(--bad) / var(--tint)); }
-.warn .tag, .tag.warn { color: rgb(var(--warn)); border-color: rgb(var(--warn) / .45); background: rgb(var(--warn) / var(--tint)); }
-.idle .tag, .tag.idle { color: rgb(var(--idle)); }
-.off .tag, .tag.off { color: rgb(var(--subtle)); border-style: dashed; background: none; }
-.cell .tag { background: rgb(var(--card)); }
+.cell .nums { font-family: var(--mono); font-size: 11px; font-variant-numeric: tabular-nums; color: rgb(var(--muted)); }
+.cell img { display: block; width: 116px; height: 72px; object-fit: cover; border-radius: 4px; margin-top: 6px; background: rgb(var(--soft)); }
+.cell .flags { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 3px; }
+.tag { display: inline-flex; align-items: center; gap: 4px; font: 600 11px/16px var(--mono); letter-spacing: .02em; padding: 0 6px; border: 1px solid rgb(var(--line-strong)); border-radius: 4px; white-space: nowrap; color: rgb(var(--fg)); background: rgb(var(--soft)); }
+.tag::before { font-weight: 700; }
+.cell.off { --mark: var(--line-hover); background: none; border-style: dashed; }
+.tag.off { color: rgb(var(--muted)); border-style: dashed; background: none; }
 .check { display: block; margin-top: 3px; font-size: 12px; line-height: 16px; overflow-wrap: anywhere; }
 .was { color: rgb(var(--muted)); font-weight: 400; text-decoration: line-through; margin-left: 4px; font: 11px/16px var(--mono); }
-.note { margin: 8px 0; padding: 6px 10px; border-left: 2px solid currentColor; border-radius: 0 4px 4px 0; overflow-wrap: anywhere; background: rgb(var(--soft)); }
-.note.ok { color: rgb(var(--ok)); background: rgb(var(--ok) / var(--tint)); } .note.bad { color: rgb(var(--bad)); background: rgb(var(--bad) / var(--tint)); }
-.note.warn { color: rgb(var(--warn)); background: rgb(var(--warn) / var(--tint)); } .note.idle { color: rgb(var(--muted)); }
+.note { --mark: var(--line-hover); margin: 8px 0; padding: 6px 10px; border-left: 4px solid rgb(var(--mark)); border-radius: 0 4px 4px 0; overflow-wrap: anywhere; background: rgb(var(--soft)); color: rgb(var(--fg)); }
 .omitted { font-size: 12px; line-height: 18px; color: rgb(var(--muted)); margin: 10px 0 0; }
 .group { margin-top: 26px; }
 .group h3 { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font: 600 16px/24px var(--sans); text-transform: none; letter-spacing: 0; color: rgb(var(--fg)); margin: 0 0 8px; }
@@ -180,22 +201,55 @@ figure { margin: 0; min-width: 0; } figure video { width: 100%; }
 figcaption { font: 11px/16px var(--mono); color: rgb(var(--subtle)); margin-top: 4px; }
 ul { padding-left: 20px; }
 .legend { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
+.previous { border: 1px solid rgb(var(--info) / .6); border-left: 4px solid rgb(var(--info)); border-radius: 4px; padding: 8px 12px; margin: 10px 0; background: rgb(var(--info) / var(--tint)); }
+.previous h3 { margin: 0 0 6px; color: rgb(var(--fg)); }
+.previous .facts { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px 16px; }
+.filters { position: sticky; top: 49px; z-index: 4; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: 0 0 12px; padding: 8px 10px; background: rgb(var(--card)); border: 1px solid rgb(var(--line)); border-radius: 6px; box-shadow: var(--shadow-raised); }
+.filters .label { font: 500 11px/16px var(--mono); text-transform: uppercase; letter-spacing: .07em; color: rgb(var(--subtle)); margin-right: 2px; }
+.filters button.chip { font: 600 11px/16px var(--mono); padding: 4px 8px; border-radius: 4px; border: 1px solid rgb(var(--line-strong)); background: rgb(var(--soft)); color: rgb(var(--fg)); cursor: pointer; }
+.filters button.chip[aria-pressed="true"] { background: rgb(var(--fg)); color: rgb(var(--card)); border-color: rgb(var(--fg)); }
+.filters select { font: 12px/16px var(--sans); color: rgb(var(--fg)); background: rgb(var(--soft)); border: 1px solid rgb(var(--line-strong)); border-radius: 4px; padding: 4px 6px; max-width: 100%; }
+.filters .count { margin-left: auto; font: 12px/16px var(--mono); color: rgb(var(--muted)); }
+.filters .keys { flex-basis: 100%; font-size: 12px; line-height: 16px; color: rgb(var(--muted)); }
+kbd { font: 11px/14px var(--mono); border: 1px solid rgb(var(--line-strong)); border-bottom-width: 2px; border-radius: 3px; padding: 0 4px; background: rgb(var(--soft)); color: rgb(var(--fg)); }
+[data-hidden] { display: none !important; }
+.panel { display: none; }
+html.js .panel.open { display: flex; flex-direction: column; position: fixed; z-index: 20; top: 0; right: 0; bottom: 0; width: min(46vw, 680px); background: rgb(var(--card)); border-left: 1px solid rgb(var(--line-strong)); box-shadow: var(--shadow-floating); }
+html.js body.panel-open .page { margin-right: min(46vw, 680px); max-width: none; }
+.panel header { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 10px 14px; border-bottom: 1px solid rgb(var(--line)); background: rgb(var(--soft)); }
+.panel header .title { flex: 1 1 12em; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-weight: 600; overflow-wrap: anywhere; }
+.panel header .title .name { flex: 0 1 auto; }
+.panel header .title .nums { font: 12px/16px var(--mono); color: rgb(var(--muted)); font-weight: 400; }
+.panel header .title .why { display: none; }
+.panel header .position { font: 12px/16px var(--mono); color: rgb(var(--muted)); }
+.panel header button { font: 600 12px/16px var(--sans); color: rgb(var(--fg)); background: rgb(var(--card)); border: 1px solid rgb(var(--line-strong)); border-radius: 4px; padding: 6px 10px; cursor: pointer; min-width: 40px; }
+.panel header button:hover { border-color: rgb(var(--line-hover)); }
+.panel header a.permalink { font-size: 12px; }
+.panel .content { overflow-y: auto; padding: 4px 16px 24px; flex: 1; overscroll-behavior: contain; }
+html.js .nojs { display: none; }
+.js-only { display: none; }
+html.js .js-only { display: block; }
+html.js .filters.js-only { display: flex; }
 a.totop { position: fixed; right: 16px; bottom: 16px; z-index: 6; text-decoration: none; font: 500 11px/16px var(--mono); text-transform: uppercase; letter-spacing: .07em; color: rgb(var(--fg)); background: rgb(var(--card)); border: 1px solid rgb(var(--line-strong)); border-radius: 4px; padding: 7px 12px; box-shadow: var(--shadow-floating); }
+html.js body.panel-open a.totop { display: none; }
 footer { margin-top: 40px; }
+@media (max-width: 1100px) { html.js .panel.open { width: 100%; left: 0; border-left: none; } html.js body.panel-open .page { margin-right: auto; } html.js body.panel-open { overflow: hidden; } }
 @media (max-width: 720px) { .pair { grid-template-columns: 1fr; } }
-@media (max-width: 640px) { h1 { font-size: 20px; line-height: 28px; } h2 { font-size: 16px; line-height: 24px; } .tile .big { font-size: 24px; line-height: 32px; } table.matrix th:first-child, table.matrix td:first-child { max-width: 100px; font-size: 12px; } table.matrix .cell { width: 118px; } table.matrix.by-preset td:first-child { width: 92px; } .cell img { width: 102px; height: 64px; } summary .nums span { min-width: 0; } details > .body { padding: 2px 12px 12px; } }
+@media (max-width: 640px) { h1 { font-size: 20px; line-height: 28px; } h2 { font-size: 16px; line-height: 24px; } .tile .big { font-size: 24px; line-height: 32px; } table.matrix th:first-child, table.matrix td:first-child { max-width: 100px; font-size: 12px; } table.matrix .cell { width: 118px; } table.matrix.by-preset td:first-child { width: 92px; } .cell img { width: 100px; height: 62px; } summary .nums span { min-width: 0; } details > .body { padding: 2px 12px 12px; } .filters { top: 49px; } .filters .keys { display: none; } .panel header { padding: 8px 10px; } .panel .content { padding: 4px 12px 24px; } }
 """
+    + STATUS_STYLE
 )
 
 THEME_KEY = "potion-audit-theme"
 SCRIPT = """
+document.documentElement.classList.add('js');
 var THEMES = ['system', 'dark', 'light'];
 function storedTheme() { try { var value = localStorage.getItem('%(key)s'); return THEMES.indexOf(value) >= 0 ? value : 'system'; } catch (error) { return 'system'; } }
 function applyTheme(pref) { var root = document.documentElement; if (pref === 'system') root.removeAttribute('data-theme'); else root.setAttribute('data-theme', pref); var button = document.getElementById('theme'); if (button) button.textContent = 'Theme: ' + pref; }
 var currentTheme = storedTheme();
 function nextTheme() { currentTheme = THEMES[(THEMES.indexOf(currentTheme) + 1) %% THEMES.length]; try { localStorage.setItem('%(key)s', currentTheme); } catch (error) {} applyTheme(currentTheme); }
 applyTheme(currentTheme);
-function openTarget() { var id = decodeURIComponent(location.hash.slice(1)); if (!id) return; var node = document.getElementById(id); if (!node) return; for (var parent = node; parent; parent = parent.parentElement) { if (parent.tagName === 'DETAILS') parent.open = true; } node.scrollIntoView(); }
+function openTarget() { var id = decodeURIComponent(location.hash.slice(1)); if (!id) return; if (openDetail(id)) return; var node = document.getElementById(id); if (!node) return; for (var parent = node; parent; parent = parent.parentElement) { if (parent.tagName === 'DETAILS') parent.open = true; } node.scrollIntoView(); }
 function watchSections() {
   var links = [].slice.call(document.querySelectorAll('nav.toc a'));
   if (!links.length || !('IntersectionObserver' in window)) return;
@@ -204,8 +258,84 @@ function watchSections() {
   var observer = new IntersectionObserver(mark, { rootMargin: '0px 0px -70%% 0px' });
   headings.forEach(function (heading) { if (heading) observer.observe(heading); });
 }
+var currentId = null;
+function byId(id) { return id ? document.getElementById(id) : null; }
+function detailFor(id) { var node = byId(id); return node && node.classList.contains('detail') ? node : null; }
+function cardFor(id) { var found = null; [].forEach.call(document.querySelectorAll('a.cell[data-target]'), function (card) { if (!found && card.getAttribute('data-target') === id) found = card; }); return found; }
+function visibleCards() { return [].slice.call(document.querySelectorAll('a.cell[data-target]')).filter(function (card) { for (var node = card; node; node = node.parentElement) { if (node.hasAttribute && node.hasAttribute('data-hidden')) return false; } return true; }); }
+function openDetail(id) {
+  var node = detailFor(id); var panel = byId('panel');
+  if (!node || !panel) return false;
+  var summary = node.querySelector('summary'); var body = node.querySelector('.body');
+  byId('panel-title').innerHTML = summary ? summary.innerHTML : id;
+  byId('panel-content').innerHTML = body ? body.innerHTML : '';
+  byId('panel-content').scrollTop = 0;
+  byId('panel-link').setAttribute('href', '#' + id);
+  [].forEach.call(document.querySelectorAll('a.cell.current'), function (card) { card.classList.remove('current'); });
+  currentId = id;
+  var card = cardFor(id); var top = card ? card.getBoundingClientRect().top : null;
+  panel.classList.add('open'); document.body.classList.add('panel-open');
+  if (card) { window.scrollBy(0, card.getBoundingClientRect().top - top); card.classList.add('current'); card.scrollIntoView({ block: 'nearest' }); }
+  var list = visibleCards(); var index = list.indexOf(card);
+  byId('panel-position').textContent = index >= 0 ? (index + 1) + ' / ' + list.length : '';
+  byId('panel-prev').disabled = index <= 0; byId('panel-next').disabled = index < 0 || index >= list.length - 1;
+  if (history.replaceState) history.replaceState(null, '', '#' + id);
+  return true;
+}
+function closeDetail() {
+  var panel = byId('panel'); if (!panel || !currentId) return;
+  var card = cardFor(currentId); var top = card ? card.getBoundingClientRect().top : null;
+  panel.classList.remove('open'); document.body.classList.remove('panel-open');
+  if (card) { window.scrollBy(0, card.getBoundingClientRect().top - top); card.classList.remove('current'); card.focus({ preventScroll: true }); }
+  currentId = null;
+  if (history.replaceState) history.replaceState(null, '', location.pathname + location.search);
+}
+function stepDetail(delta) {
+  var list = visibleCards(); if (!list.length) return;
+  var index = list.indexOf(cardFor(currentId));
+  var next = index < 0 ? (delta > 0 ? 0 : list.length - 1) : index + delta;
+  if (next >= 0 && next < list.length) openDetail(list[next].getAttribute('data-target'));
+}
+var filters = { status: 'all', preset: 'all' };
+function matches(card) {
+  var status = filters.status;
+  var ok = status === 'all' || (status === 'beyond' ? card.getAttribute('data-beyond') === '1' : status === 'changed' ? card.getAttribute('data-changed') === '1' : status === 'notrun' ? card.getAttribute('data-ran') === '0' : card.getAttribute('data-status') === status);
+  return ok && (filters.preset === 'all' || card.getAttribute('data-preset') === filters.preset);
+}
+function applyFilters() {
+  var shown = 0; var total = 0;
+  [].forEach.call(document.querySelectorAll('#matrix-board a.cell'), function (card) { total += 1; if (matches(card)) { card.removeAttribute('data-hidden'); shown += 1; } else card.setAttribute('data-hidden', ''); });
+  [].forEach.call(document.querySelectorAll('#matrix-board tr[data-preset-row]'), function (row) { if (row.querySelector('a.cell:not([data-hidden])')) row.removeAttribute('data-hidden'); else row.setAttribute('data-hidden', ''); });
+  var count = byId('filter-count'); if (count) count.textContent = shown + ' of ' + total + ' cells';
+  [].forEach.call(document.querySelectorAll('.filters button.chip'), function (chip) { chip.setAttribute('aria-pressed', chip.getAttribute('data-value') === filters.status ? 'true' : 'false'); });
+}
+function setupFilters() {
+  [].forEach.call(document.querySelectorAll('.filters button.chip'), function (chip) { chip.addEventListener('click', function () { filters.status = chip.getAttribute('data-value'); applyFilters(); }); });
+  var select = byId('filter-preset'); if (select) select.addEventListener('change', function () { filters.preset = select.value; applyFilters(); });
+  applyFilters();
+}
+document.addEventListener('click', function (event) {
+  var link = event.target.closest ? event.target.closest('a[href^="#"]') : null;
+  if (!link || link.id === 'panel-link' || event.ctrlKey || event.metaKey || event.shiftKey) return;
+  if (detailFor(decodeURIComponent(link.getAttribute('href').slice(1)))) { event.preventDefault(); openDetail(decodeURIComponent(link.getAttribute('href').slice(1))); }
+});
+document.addEventListener('keydown', function (event) {
+  var target = event.target; var tag = target && target.tagName;
+  if (event.ctrlKey || event.metaKey || event.altKey || tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA' || tag === 'VIDEO' || tag === 'AUDIO' || (target && target.isContentEditable)) return;
+  var key = event.key;
+  if (key === 'Escape' && currentId) { closeDetail(); event.preventDefault(); }
+  else if (key === 'ArrowRight' || key === 'j' || key === 'n') { if (currentId || key !== 'ArrowRight') { stepDetail(1); event.preventDefault(); } }
+  else if (key === 'ArrowLeft' || key === 'k' || key === 'p') { if (currentId || key !== 'ArrowLeft') { stepDetail(-1); event.preventDefault(); } }
+});
 window.addEventListener('hashchange', openTarget);
-window.addEventListener('DOMContentLoaded', function () { applyTheme(currentTheme); var button = document.getElementById('theme'); if (button) button.addEventListener('click', nextTheme); openTarget(); watchSections(); });
+window.addEventListener('DOMContentLoaded', function () {
+  applyTheme(currentTheme);
+  var button = document.getElementById('theme'); if (button) button.addEventListener('click', nextTheme);
+  var close = byId('panel-close'); if (close) close.addEventListener('click', closeDetail);
+  var prev = byId('panel-prev'); if (prev) prev.addEventListener('click', function () { stepDetail(-1); });
+  var next = byId('panel-next'); if (next) next.addEventListener('click', function () { stepDetail(1); });
+  setupFilters(); openTarget(); watchSections();
+});
 """ % {"key": THEME_KEY}
 
 
@@ -290,6 +420,10 @@ class Entry:
     @property
     def seed(self):
         return ((self.request or {}).get("form_data") or {}).get("seed")
+
+    @property
+    def beyond(self) -> bool:
+        return self.status in BEYOND_STATUSES
 
 
 @dataclass
@@ -967,10 +1101,32 @@ def _storage(run_set: RunSet) -> str:
     return "".join(parts)
 
 
-def _cell_html(entry: Entry) -> str:
+def _flags(entry: Entry, row: dict | None) -> str:
+    flags = []
+    if entry.beyond and entry.shown_verdict:
+        flags.append('<span class="tag beyond">beyond tier</span>')
+    if row and row.get("verdict_changed"):
+        flags.append(f'<span class="tag info">was {escape(str(row.get("previous_verdict")))}</span>')
+    elif row and (row.get("duration_flag") or row.get("vram_flag") or _ssim_flag(row)):
+        flags.append('<span class="tag info">changed</span>')
+    if row and row.get("request_changed"):
+        flags.append('<span class="tag off">request changed</span>')
+    return f'<div class="flags">{"".join(flags)}</div>' if flags else ""
+
+
+def _ssim_flag(row: dict) -> bool:
+    value = (row.get("ssim") or {}).get("value")
+    return value is not None and value < SSIM_FLAG
+
+
+def _interesting(row: dict | None) -> bool:
+    return bool(row) and bool(row.get("verdict_changed") or row.get("duration_flag") or row.get("vram_flag") or _ssim_flag(row))
+
+
+def _cell_html(entry: Entry, row: dict | None = None) -> str:
     klass = _klass(entry)
     was = f'<span class="was">{escape(entry.previous_verdict)}</span>' if entry.previous_verdict else ""
-    lines = [f'<div class="mode">{escape(entry.column)}{" · warm" if entry.warm else ""}</div><span class="tag">{escape(_label(entry))}</span>{was}']
+    lines = [f'<div class="mode">{escape(entry.column)}{" · warm" if entry.warm else ""}</div><span class="tag {klass}">{escape(_label(entry))}</span>{was}', _flags(entry, row)]
     numbers = " · ".join(value for value in (_seconds(entry.run_seconds), _vram(entry.peak_vram_mb)) if value)
     if numbers:
         lines.append(f'<div class="small nums">{escape(numbers)}</div>')
@@ -980,15 +1136,17 @@ def _cell_html(entry: Entry) -> str:
     if thumb:
         lines.append(f'<img src="{thumb}" alt="" loading="lazy" width="116" height="72">')
     title = escape(entry.reason or entry.key, quote=True)
-    return f'<a class="cell {klass}" href="#{entry.slug}" title="{title}">{"".join(lines)}</a>'
+    data = f' data-target="{entry.slug}" data-status="{klass}" data-preset="{escape(entry.preset, quote=True)}" data-ran="{"1" if entry.shown_verdict else "0"}" data-beyond="{"1" if entry.beyond else "0"}" data-changed="{"1" if _interesting(row) else "0"}"'
+    return f'<a class="cell {klass}" href="#{entry.slug}" title="{title}"{data}>{"".join(lines)}</a>'
 
 
-def _matrix(run_set: RunSet) -> str:
+def _matrix(run_set: RunSet, rows_by_key: dict | None = None) -> str:
+    rows_by_key = rows_by_key or {}
     presets: dict[str, list[Entry]] = {}
     for entry in run_set.entries:
         presets.setdefault(entry.preset, []).append(entry)
-    rows = "".join(f'<tr><td>{escape(preset)}</td><td><div class="modes">{"".join(_cell_html(entry) for entry in entries)}</div></td></tr>' for preset, entries in presets.items())
-    return f'<div class="scroll"><table class="matrix by-preset"><thead><tr><th>Preset</th><th>Modes</th></tr></thead><tbody>{rows}</tbody></table></div>'
+    rows = "".join(f'<tr data-preset-row="{escape(preset, quote=True)}"><td>{escape(preset)}</td><td><div class="modes">{"".join(_cell_html(entry, rows_by_key.get(entry.key)) for entry in entries)}</div></td></tr>' for preset, entries in presets.items())
+    return f'<div class="scroll" id="matrix-board"><table class="matrix by-preset"><thead><tr><th>Preset</th><th>Modes</th></tr></thead><tbody>{rows}</tbody></table></div>'
 
 
 def _where(item: dict) -> str:
@@ -1079,9 +1237,39 @@ def _history(run_report: dict) -> str:
     return "<h3>Run report</h3><pre>" + escape("\n".join(lines)) + "</pre>"
 
 
-def _detail(entry: Entry) -> str:
+def _previous_html(entry: Entry, row: dict | None, previous: Entry | None, against: str | None) -> str:
+    if against is None:
+        return ""
+    if row is None:
+        return f'<div class="previous"><h3>Against {escape(against)}</h3><p class="small">Not in the previous audit: this cell runs for the first time.</p></div>'
+    ssim = row.get("ssim") or {}
+    duration = row.get("duration_change")
+    verdict = f'<span class="tag {_verdict_klass(row.get("previous_verdict"))}">{escape(str(row.get("previous_verdict")))}</span> → <span class="tag {_verdict_klass(row.get("verdict"))}">{escape(str(row.get("verdict")))}</span>'
+    facts = [
+        ("Verdict", verdict + (" <strong>changed</strong>" if row.get("verdict_changed") else " same")),
+        ("Run time", escape(f"{_seconds(row.get('previous_run_seconds')) or '?'} → {_seconds(row.get('run_seconds')) or '?'}") + (escape(f" ({duration:+.0%})") if duration is not None else "") + (" <strong>beyond ±" + f"{DURATION_TOLERANCE:.0%}" + "</strong>" if row.get("duration_flag") else "")),
+        ("Peak VRAM", escape(f"{_mib(row.get('previous_peak_vram_mb')) or '?'} → {_mib(row.get('peak_vram_mb')) or '?'}") + (escape(f" ({row['vram_change_mb']:+,.0f} MiB)".replace(",", " ")) if row.get("vram_change_mb") is not None else "") + (" <strong>beyond ±" + f"{VRAM_TOLERANCE_MB:.0f} MiB" + "</strong>" if row.get("vram_flag") else "")),
+        ("SSIM", escape(f"{ssim['value']:.3f}") + (f" <strong>under {SSIM_FLAG}</strong>" if _ssim_flag(row) else "") if ssim.get("value") is not None else escape(str(ssim.get("reason") or "not compared"))),
+    ]
+    parts = [f'<div class="previous"><h3>Against {escape(against)}</h3>', _facts(facts)]
+    if row.get("request_changed"):
+        parts.append('<p class="small"><span class="tag off">request changed</span> The request differs from the previous one: its run time and VRAM measure other work.</p>')
+    if _ssim_flag(row) and previous is not None:
+        parts.append(f'<div class="pair">{_figure(previous, "Before: " + against)}{_figure(entry, "This run")}</div>')
+    parts.append("</div>")
+    return "".join(parts)
+
+
+def _verdict_klass(value) -> str:
+    return VERDICT_CLASS.get(str(value), STATUS_CLASS.get(str(value), "idle"))
+
+
+def _detail(entry: Entry, row: dict | None = None, previous: Entry | None = None, against: str | None = None) -> str:
     result = entry.result or {}
     parts = []
+    if entry.beyond:
+        parts.append('<p class="note beyond">Above the memory tier of the GPU: played after every cell within the tier, so an OOM here held back no other cell.</p>' if entry.shown_verdict else '<p class="note beyond">Above the memory tier of the GPU and not played in this run.</p>')
+    parts.append(_previous_html(entry, row, previous, against))
     if entry.reason:
         parts.append(f"<p><strong>{escape(entry.status or '')}</strong>: {escape(entry.reason)}</p>")
     if entry.reevaluated:
@@ -1134,8 +1322,9 @@ def _detail(entry: Entry) -> str:
     if entry.run_report:
         parts.append(_history(entry.run_report))
     was = f'<span class="was">{escape(entry.previous_verdict)}</span>' if entry.previous_verdict else ""
-    summary = _summary_line(f'<span class="tag {_klass(entry)}">{escape(_label(entry))}</span>{was}', entry.key, entry.run_seconds, entry.peak_vram_mb, None if entry.verdict else entry.reason)
-    return f'<details id="{entry.slug}"><summary>{summary}</summary><div class="body">{"".join(parts)}</div></details>'
+    beyond = '<span class="tag beyond">beyond tier</span>' if entry.beyond and entry.shown_verdict else ""
+    summary = _summary_line(f'<span class="tag {_klass(entry)}">{escape(_label(entry))}</span>{was}{beyond}', entry.key, entry.run_seconds, entry.peak_vram_mb, None if entry.verdict else entry.reason)
+    return f'<details class="detail" id="{entry.slug}"><summary>{summary}</summary><div class="body">{"".join(parts)}</div></details>'
 
 
 def _summary_line(tag: str, name: str, seconds, vram, why: str | None) -> str:
@@ -1280,8 +1469,15 @@ def _summary(run_set: RunSet | None, comparison: dict | None, scenario: Scenario
         not_run = sum(statuses.values())
         reevaluated = sum(1 for entry in run_set.entries if entry.previous_verdict)
         body = f'<div class="big">{passed}<small> of {ran} cells passed</small></div>'
+        body += _bar(verdicts, statuses)
         if others:
             body += f'<div class="legend">{_verdict_tags(others, VERDICT_CLASS)}</div>'
+        beyond = {}
+        for entry in run_set.entries:
+            if entry.beyond and entry.shown_verdict:
+                beyond[entry.shown_verdict] = beyond.get(entry.shown_verdict, 0) + 1
+        if beyond:
+            body += f'<p><span class="tag beyond">beyond tier</span> {escape(" · ".join(f"{name} {count}" for name, count in sorted(beyond.items())))}, played last</p>'
         body += f"<p>Not run: {not_run}" + (f" ({escape(' · '.join(f'{name} {count}' for name, count in sorted(statuses.items())))})" if statuses else "") + "</p>"
         if reevaluated:
             body += f"<p>{reevaluated} verdicts changed by a re-evaluation.</p>"
@@ -1348,12 +1544,61 @@ def _summary(run_set: RunSet | None, comparison: dict | None, scenario: Scenario
     return headline + f'<div class="summary">{"".join(tiles)}</div>'
 
 
+def _bar(verdicts: dict[str, int], statuses: dict[str, int]) -> str:
+    total = sum(verdicts.values()) + sum(statuses.values())
+    if not total:
+        return ""
+    order = ["PASS", "FAIL", "REJECTED", "OOM", "TIMEOUT", "STOPPED"]
+    parts = []
+    for name in order + sorted(set(verdicts) - set(order)):
+        if verdicts.get(name):
+            parts.append((VERDICT_CLASS.get(name, "warn"), name, verdicts[name]))
+    not_run = sum(statuses.values())
+    if not_run:
+        parts.append(("idle", "not run", not_run))
+    spans = "".join(f'<span class="{klass}" style="flex: {count}" title="{escape(name, quote=True)}: {count}"></span>' for klass, name, count in parts)
+    label = ", ".join(f"{name} {count}" for _, name, count in parts)
+    return f'<div class="bar" role="img" aria-label="{escape(label, quote=True)}">{spans}</div>'
+
+
+def _filters(run_set: RunSet, comparison: dict | None) -> str:
+    present = {_klass(entry) for entry in run_set.entries if entry.shown_verdict}
+    chips = [("all", "All")]
+    chips += [(klass, label) for klass, label in (("ok", "PASS"), ("bad", "FAIL"), ("oom", "OOM"), ("slow", "TIMEOUT"), ("warn", "STOPPED")) if klass in present]
+    if any(entry.beyond for entry in run_set.entries):
+        chips.append(("beyond", "Beyond tier"))
+    if any(not entry.shown_verdict for entry in run_set.entries):
+        chips.append(("notrun", "Not run"))
+    if comparison is not None:
+        chips.append(("changed", "Changed since the previous audit"))
+    buttons = "".join(f'<button type="button" class="chip" data-value="{value}" aria-pressed="{"true" if value == "all" else "false"}">{escape(label)}</button>' for value, label in chips)
+    presets = []
+    for entry in run_set.entries:
+        if entry.preset not in presets:
+            presets.append(entry.preset)
+    options = '<option value="all">All presets</option>' + "".join(f'<option value="{escape(preset, quote=True)}">{escape(preset)}</option>' for preset in presets)
+    keys = 'Click a card to open its details beside the matrix. <kbd>j</kbd> or <kbd>→</kbd> next, <kbd>k</kbd> or <kbd>←</kbd> previous, <kbd>Esc</kbd> closes; the address bar then links to that cell.'
+    return f'<div class="filters js-only" role="group" aria-label="Filters"><span class="label">Status</span>{buttons}<label class="label" for="filter-preset">Preset</label><select id="filter-preset">{options}</select><span class="count" id="filter-count"></span><span class="keys">{keys}</span></div>'
+
+
+def _panel() -> str:
+    return (
+        '<aside class="panel" id="panel" aria-label="Details">'
+        '<header><span class="title" id="panel-title"></span><span class="position" id="panel-position"></span>'
+        '<button type="button" id="panel-prev" title="Previous (k or ←)">‹ Prev</button>'
+        '<button type="button" id="panel-next" title="Next (j or →)">Next ›</button>'
+        '<a class="permalink" id="panel-link" href="#">Link</a>'
+        '<button type="button" id="panel-close" title="Close (Esc)">✕ Close</button></header>'
+        '<div class="content" id="panel-content"></div></aside>'
+    )
+
+
 def _meta(pairs: list[tuple[str, str]]) -> str:
     return '<dl class="meta">' + "".join(f"<div><dt>{escape(name)}</dt><dd>{escape(value)}</dd></div>" for name, value in pairs) + "</dl>"
 
 
 def _page(title: str, meta: list[tuple[str, str]], body: str, nav: list[tuple[str, str]] = ()) -> str:
-    links = "".join(f'<a href="#{anchor}">{escape(label)}</a>' for anchor, label in nav)
+    links = "".join(f'<a href="#{anchor}"{" class=\"nojs\"" if anchor in ("cells", "vp-steps") else ""}>{escape(label)}</a>' for anchor, label in nav)
     toc = f'<nav class="toc" aria-label="Sections">{links}<button type="button" class="theme" id="theme">Theme: system</button></nav>'
     top = '<a class="totop" href="#top">↑ Top</a>' if links else ""
     return (
@@ -1361,12 +1606,38 @@ def _page(title: str, meta: list[tuple[str, str]], body: str, nav: list[tuple[st
         f"<title>{escape(title)}</title><style>{STYLE}</style><script>{SCRIPT}</script></head><body><div class=\"page\">"
         f'<header class="top" id="top"><p class="eyebrow">PotionUI · preset audit</p><h1>{escape(title)}</h1>{_meta(meta)}</header>{toc}<main>{body}</main>'
         f'<footer><p class="small muted">Written by potion-audit {escape(__version__)} on {escape(datetime.now(UTC).isoformat(timespec="seconds"))}.</p></footer>'
-        f"{top}</div></body></html>\n"
+        f"{top}</div>{_panel() if any(anchor in ('matrix', 'vp') for anchor, _ in nav) else ''}</body></html>\n"
     )
 
 
-def _block(anchor: str, title: str, content: str) -> str:
-    return f'<section class="block"><h2 id="{anchor}">{escape(title)}</h2>{content}</section>'
+def _block(anchor: str, title: str, content: str, css: str = "") -> str:
+    return f'<section class="block{" " + css if css else ""}"><h2 id="{anchor}">{escape(title)}</h2>{content}</section>'
+
+
+def parse_machine_labels(values: list[str]) -> dict[str, str]:
+    labels = {}
+    for value in values or ():
+        old, sep, new = str(value).partition("=")
+        if not sep or not old.strip() or not new.strip():
+            raise ReportError(f"--machine-label takes OLD=NEW, not {value!r}")
+        labels[old.strip()] = new.strip()
+    return labels
+
+
+def relabel_machines(labels: dict[str, str], run_sets=(), scenarios=()) -> int:
+    changed = 0
+    for run_set in run_sets:
+        if run_set is None:
+            continue
+        for run in run_set.runs:
+            if run.get("machine") in labels:
+                run["machine"] = labels[run["machine"]]
+                changed += 1
+    for scenario in scenarios:
+        if scenario is not None and scenario.data.get("machine") in labels:
+            scenario.data["machine"] = labels[scenario.data["machine"]]
+            changed += 1
+    return changed
 
 
 def same_machine(run_set: RunSet, scenario: Scenario) -> None:
@@ -1414,7 +1685,7 @@ def _step_numbers(step: VpStep) -> str:
 
 
 def _step_cell(step: VpStep, link: bool = True) -> str:
-    lines = [f'<span class="tag">{escape(step.label)}</span>']
+    lines = [f'<span class="tag {_step_klass(step)}">{escape(step.label)}</span>']
     numbers = _step_numbers(step)
     if numbers:
         lines.append(f'<div class="small">{escape(numbers)}</div>')
@@ -1428,7 +1699,7 @@ def _step_cell(step: VpStep, link: bool = True) -> str:
     title = escape(step.reason or step.key, quote=True)
     if not link:
         return f'<div class="cell {_step_klass(step)}" title="{title}">{"".join(lines)}</div>'
-    return f'<a class="cell {_step_klass(step)}" href="#{step.slug}" title="{title}">{"".join(lines)}</a>'
+    return f'<a class="cell {_step_klass(step)}" href="#{step.slug}" title="{title}" data-target="{step.slug}">{"".join(lines)}</a>'
 
 
 def _scenario_table(scenario: Scenario) -> str:
@@ -1609,7 +1880,7 @@ def _step_detail(step: VpStep) -> str:
     elif record.get("result"):
         parts.append('<p class="small muted">The result.json of this step is not in the run folder.</p>')
     summary = _summary_line(f'<span class="tag {_step_klass(step)}">{escape(step.label)}</span>', step.column, step.seconds, step.peak_vram_mb, None if step.verdict else step.reason)
-    return f'<details id="{step.slug}"><summary>{summary}</summary><div class="body">{"".join(parts)}</div></details>'
+    return f'<details class="detail" id="{step.slug}"><summary>{summary}</summary><div class="body">{"".join(parts)}</div></details>'
 
 
 def render_report(run_set: RunSet | None, comparison: dict | None = None, scenario: Scenario | None = None, scenario_comparison: dict | None = None, previous: RunSet | None = None) -> str:
@@ -1629,7 +1900,8 @@ def render_report(run_set: RunSet | None, comparison: dict | None = None, scenar
         if comparison is not None:
             body.append(_block("compare", "Compared with the previous run", _compare_html(comparison, run_set, previous)))
             nav.append(("compare", "Comparison"))
-        body.append(_block("matrix", "Matrix", '<p class="small muted">One row per preset, one card per mode. A card gives its verdict (or why it did not run), the run time and the peak VRAM of the preset statistics; click it for the details.</p>' + _matrix(run_set)))
+        rows_by_key = {row["cell"]: row for row in comparison["rows"]} if comparison is not None else {}
+        body.append(_block("matrix", "Matrix", '<p class="small muted">One row per preset, one card per mode. A card gives its verdict (or why it did not run), the run time and the peak VRAM of the preset statistics; open it for the details, which hold the comparison with the previous audit.</p>' + _filters(run_set, comparison) + _matrix(run_set, rows_by_key)))
         nav.append(("matrix", "Matrix"))
     if scenario is not None:
         if run_set is None:
@@ -1638,12 +1910,15 @@ def render_report(run_set: RunSet | None, comparison: dict | None = None, scenar
         body.append(_block("vp", "Video Producer scenario", _scenario_section(scenario, scenario_comparison)))
         nav.append(("vp", "Scenario"))
     if run_set is not None:
-        cells = _grouped(run_set.entries, lambda entry: entry.preset, lambda entry: (_label(entry), _klass(entry)), _detail)
-        body.append(_block("cells", "Cells", f'<p class="small muted">{len(run_set.entries)} cells, grouped by preset. Each line gives the verdict, the run time and the peak VRAM; open it for the details.</p>' + cells))
+        rows_by_key = {row["cell"]: row for row in comparison["rows"]} if comparison is not None else {}
+        before = {entry.key: entry for entry in previous.entries} if previous is not None else {}
+        against = ", ".join(str(run) for run in comparison["previous"]["runs"]) if comparison is not None else None
+        cells = _grouped(run_set.entries, lambda entry: entry.preset, lambda entry: (_label(entry), _klass(entry)), lambda entry: _detail(entry, rows_by_key.get(entry.key), before.get(entry.key), against))
+        body.append(_block("cells", "Cells", f'<p class="small muted">{len(run_set.entries)} cells, grouped by preset. Each line gives the verdict, the run time and the peak VRAM; open it for the details.</p>' + cells, css="nojs"))
         nav.append(("cells", "Cells"))
     if scenario is not None:
         steps = _grouped(scenario.steps, lambda step: step.engine, lambda step: (step.label, _step_klass(step)), _step_detail)
-        body.append(_block("vp-steps", "Scenario steps", f'<p class="small muted">{len(scenario.steps)} steps, grouped by engine.</p>' + steps))
+        body.append(_block("vp-steps", "Scenario steps", f'<p class="small muted">{len(scenario.steps)} steps, grouped by engine.</p>' + steps, css="nojs"))
         nav.append(("vp-steps", "Steps"))
     return _page("Potion audit report", meta, "".join(body), nav)
 
@@ -1751,7 +2026,7 @@ def render_merge(sets: list[RunSet], scenarios: dict[str, Scenario] | None = Non
                 continue
             numbers = " · ".join(value for value in (_seconds(entry.run_seconds), _vram(entry.peak_vram_mb)) if value)
             was = f'<span class="was">{escape(entry.previous_verdict)}</span>' if entry.previous_verdict else ""
-            cells.append(f'<div class="cell {_klass(entry)}" title="{escape(entry.reason or "", quote=True)}"><span class="tag">{escape(_label(entry))}</span>{was}<div class="small">{escape(numbers)}</div></div>')
+            cells.append(f'<div class="cell {_klass(entry)}" title="{escape(entry.reason or "", quote=True)}"><span class="tag {_klass(entry)}">{escape(_label(entry))}</span>{was}<div class="small">{escape(numbers)}</div></div>')
         rows.append([escape(key)] + cells)
     body = [
         "<h2>Machines</h2>",

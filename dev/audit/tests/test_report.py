@@ -400,3 +400,27 @@ def test_compare_reads_the_models_by_their_sha256_and_not_by_their_id_on_the_ins
     write(tmp_path / "out" / "old" / "run.json", run)
     assert main(["report", str(tmp_path / "out" / "new"), "--compare", str(tmp_path / "out" / "old"), "--no-media", "--out", str(tmp_path / "report")]) == 0
     assert "warning: the page shows the names of 2 machines: box, old-box" in capsys.readouterr().err
+
+
+def test_a_machine_label_replaces_an_old_name_on_the_page_and_in_report_json(fake_api, tmp_path, case_file, capsys):
+    pack = load_pack(write_pack(tmp_path, case_file))
+    play(fake_api, pack, tmp_path / "out", "old", machine="owner-box")
+    play(fake_api, pack, tmp_path / "out", "new", machine="box")
+    assert main(["report", str(tmp_path / "out" / "new"), "--compare", str(tmp_path / "out" / "old"), "--no-media", "--out", str(tmp_path / "plain")]) == 0
+    assert "owner-box" in (tmp_path / "plain" / "index.html").read_text(encoding="utf-8")
+    assert "the page shows the names of 2 machines" in capsys.readouterr().err
+    assert main(["report", str(tmp_path / "out" / "new"), "--compare", str(tmp_path / "out" / "old"), "--no-media", "--out", str(tmp_path / "relabeled"), "--machine-label", "owner-box=box"]) == 0
+    page = (tmp_path / "relabeled" / "index.html").read_text(encoding="utf-8")
+    data = (tmp_path / "relabeled" / "report.json").read_text(encoding="utf-8")
+    assert "owner-box" not in page and "owner-box" not in data
+    assert "Hardware changed: machine" not in page
+    assert "1 of the runs on this page are shown under another machine name than the one they recorded" in page
+    assert "the page shows the names" not in capsys.readouterr().err
+    assert read(tmp_path / "out" / "old" / "run.json")["machine"] == "owner-box"
+
+
+def test_a_machine_label_without_its_new_name_is_refused(fake_api, tmp_path, case_file, capsys):
+    pack = load_pack(write_pack(tmp_path, case_file))
+    play(fake_api, pack, tmp_path / "out", "new", machine="box")
+    assert main(["report", str(tmp_path / "out" / "new"), "--no-media", "--out", str(tmp_path / "r"), "--machine-label", "box"]) == 2
+    assert "--machine-label takes OLD=NEW" in capsys.readouterr().err

@@ -373,24 +373,33 @@ def _recipe_paths(paths: list[str]) -> list[str]:
     return selected
 
 
-def import_from_core(core: Path, ref: str, label: str) -> dict:
-    try:
-        import yaml
-    except ModuleNotFoundError as error:
-        raise CaseFileError("importing cases needs PyYAML: run with `uv run --locked --group cases`") from error
-    sha = _git(core, "rev-parse", "--verify", f"{ref}^{{commit}}").strip()
-    paths = _git(core, "ls-tree", "-r", "--name-only", sha, "--", CORE_PRESETS, PLUGINS, CORE_RECIPES).splitlines()
+def _plugin_repo_dirs(paths: list[str]) -> dict[str, tuple[str, str]]:
+    plugins = {path.split("/", 1)[0] for path in paths if path.count("/") == 1 and path.endswith("/manifest.yml")}
+    found = {}
+    for path in paths:
+        parts = path.split("/")
+        if len(parts) == 4 and parts[0] in plugins and parts[1] == "presets" and parts[3] == "preset.yml":
+            found["/".join(parts[:3])] = (f"plugin:{parts[0]}", parts[2])
+    return found
+
+
+def _plugin_repo_recipes(paths: list[str]) -> list[str]:
+    plugins = {path.split("/", 1)[0] for path in paths if path.count("/") == 1 and path.endswith("/manifest.yml")}
+    return [path for path in paths if path.endswith(".yml") and path.count("/") == 2 and path.split("/")[0] in plugins and path.split("/")[1] == "recipes"]
+
+
+def _read_presets(yaml, repo: Path, sha: str, paths: list[str], dirs: dict[str, tuple[str, str]]) -> list[dict]:
     presets = []
-    for folder, (origin, key) in sorted(_preset_dirs(paths).items()):
+    for folder, (origin, key) in sorted(dirs.items()):
         modes = {path[len(folder) + 7:].split("/", 1)[0] for path in paths if path.startswith(folder + "/modes/")}
         tests_path = folder + "/tests.yml"
         tests = None
         tests_blob = None
         if tests_path in paths:
-            tests = yaml.safe_load(_git(core, "show", f"{sha}:{tests_path}"))
-            tests_blob = _git(core, "rev-parse", f"{sha}:{tests_path}").strip()
+            tests = yaml.safe_load(_git(repo, "show", f"{sha}:{tests_path}"))
+            tests_blob = _git(repo, "rev-parse", f"{sha}:{tests_path}").strip()
         form_documents = {
-            path: yaml.safe_load(_git(core, "show", f"{sha}:{path}"))
+            path: yaml.safe_load(_git(repo, "show", f"{sha}:{path}"))
             for path in paths
             if path.startswith(folder + "/") and path.endswith(".yml") and path != tests_path
         }
@@ -400,7 +409,7 @@ def import_from_core(core: Path, ref: str, label: str) -> dict:
                 "key": key,
                 "path": folder,
                 "origin": origin,
-                "preset": yaml.safe_load(_git(core, "show", f"{sha}:{folder}/preset.yml")) or {},
+                "preset": yaml.safe_load(_git(repo, "show", f"{sha}:{folder}/preset.yml")) or {},
                 "modes": sorted(modes),
                 "tests": tests,
                 "tests_blob": tests_blob,
@@ -408,11 +417,40 @@ def import_from_core(core: Path, ref: str, label: str) -> dict:
                 "mode_model_fields": mode_model_fields,
             }
         )
+    return presets
+
+
+def import_from_core(core: Path, ref: str, label: str, plugins_repo: Path | None = None, plugins_ref: str | None = None, plugins_label: str = "plugins") -> dict:
+    try:
+        import yaml
+    except ModuleNotFoundError as error:
+        raise CaseFileError("importing cases needs PyYAML: run with `uv run --locked --group cases`") from error
+    if (plugins_repo is None) != (plugins_ref is None):
+        raise CaseFileError("--plugins-repo and --plugins-ref go together")
+    sha = _git(core, "rev-parse", "--verify", f"{ref}^{{commit}}").strip()
+    paths = _git(core, "ls-tree", "-r", "--name-only", sha, "--", CORE_PRESETS, PLUGINS, CORE_RECIPES).splitlines()
+    presets = _read_presets(yaml, core, sha, paths, _preset_dirs(paths))
     recipes = [
         {"path": path, "recipe": yaml.safe_load(_git(core, "show", f"{sha}:{path}")) or {}}
         for path in _recipe_paths(paths)
     ]
-    return build_case_set(sha, label, presets, recipes)
+    extra = None
+    if plugins_repo is not None:
+        plugins_sha = _git(plugins_repo, "rev-parse", "--verify", f"{plugins_ref}^{{commit}}").strip()
+        plugin_paths = _git(plugins_repo, "ls-tree", "-r", "--name-only", plugins_sha).splitlines()
+        plugin_presets = _read_presets(yaml, plugins_repo, plugins_sha, plugin_paths, _plugin_repo_dirs(plugin_paths))
+        replaced = {item["origin"] for item in plugin_presets}
+        presets = [item for item in presets if item["origin"] not in replaced] + plugin_presets
+        recipes = [item for item in recipes if not any(item["path"].startswith(PLUGINS + origin.split(":", 1)[1] + "/") for origin in replaced)]
+        recipes += [
+            {"path": path, "recipe": yaml.safe_load(_git(plugins_repo, "show", f"{plugins_sha}:{path}")) or {}}
+            for path in _plugin_repo_recipes(plugin_paths)
+        ]
+        extra = {"label": plugins_label, "ref": plugins_sha, "plugins": sorted(origin.split(":", 1)[1] for origin in replaced)}
+    data = build_case_set(sha, label, presets, recipes)
+    if extra is not None:
+        data["source"]["plugins"] = extra
+    return data
 
 
 def write_case_set(data: dict, out: Path) -> None:

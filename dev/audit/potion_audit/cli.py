@@ -17,7 +17,7 @@ from .media import probe_image, probe_video, video_encoders, write_preview
 from .pack import DEFAULT_PACK, PROFILES, PackError, load_pack, used_by, verify
 from .plan import dry_run
 from .reevaluate import ReevaluateError, reevaluate_run
-from .report import ReportError, add_pack_cells, compare_sets, group_by_machine, load_set, write_merge, write_report
+from .report import ReportError, add_pack_cells, compare_sets, group_by_machine, load_set, parse_machine_labels, relabel_machines, write_merge, write_report
 from .run import RunRefused, execute, select_case
 from .vp_report import compare_scenarios, load_one_scenario, load_scenario, split_dirs
 from .vp_scenario import add_vp_parser, vp_command
@@ -42,7 +42,7 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("--only", help="<preset>:<mode> of the case file, or with --pack a cell id or a preset of the pack")
     run.add_argument("--pack", type=Path, nargs="?", const=DEFAULT_PACK, help="the cells of a pack profile: planned with --dry-run, run with --confirm-gpu")
     run.add_argument("--profile", choices=PROFILES, default="smoke")
-    run.add_argument("--beyond-tier", action="store_true", help="plan the presets whose min_vram_gb is above the GPU")
+    run.add_argument("--beyond-tier", action=argparse.BooleanOptionalAction, default=None, help="play the cells whose tier is above the GPU, after all the others; by default as the profile of the pack says ([profiles.<name>] beyond_tier)")
     run.add_argument("--prompt", help="positive prompt in place of the case's own")
     run.add_argument("--timeout", type=float, help="seconds before the generation is cancelled")
     run.add_argument("--interval", type=float, default=2.0, help="seconds between two status polls")
@@ -60,6 +60,7 @@ def _parser() -> argparse.ArgumentParser:
     report.add_argument("--probe", type=Path, action="append", default=[], help="a probe JSON of the host or the container (repeatable)")
     report.add_argument("--note", action="append", default=[], help="a bias factor to print on the machine card (repeatable)")
     report.add_argument("--no-media", action="store_true", help="no thumbnails and no reduced copies")
+    report.add_argument("--machine-label", action="append", default=[], metavar="OLD=NEW", help="show the machine named OLD as NEW on the page and in report.json, in this run and in the compared one (repeatable)")
 
     reevaluate = commands.add_parser("reevaluate", help="check the outputs and run reports of a run again with the current checks, without GPU or network")
     reevaluate.add_argument("runs", type=Path, nargs="+")
@@ -74,6 +75,7 @@ def _parser() -> argparse.ArgumentParser:
     merge = commands.add_parser("merge", help="one page with a column per machine")
     merge.add_argument("runs", type=Path, nargs="+", help="run folders, night folders and scenario folders of several machines; the segments of one machine are put together, its scenario goes in its column")
     merge.add_argument("--out", type=Path, required=True)
+    merge.add_argument("--machine-label", action="append", default=[], metavar="OLD=NEW", help="show the machine named OLD as NEW (repeatable)")
 
     cases = commands.add_parser("cases", help="case files")
     cases_commands = cases.add_subparsers(dest="cases_command", required=True)
@@ -81,6 +83,9 @@ def _parser() -> argparse.ArgumentParser:
     importer.add_argument("--core", type=Path, required=True, help="a git checkout of the core")
     importer.add_argument("--ref", required=True, help="commit to read, without checking it out")
     importer.add_argument("--label", default="core")
+    importer.add_argument("--plugins-repo", type=Path, help="a git checkout of a plugins repository, whose <plugin>/presets replace those of the core")
+    importer.add_argument("--plugins-ref", help="commit of the plugins repository to read")
+    importer.add_argument("--plugins-label", default="plugins")
     importer.add_argument("--out", type=Path, required=True)
 
     pack = commands.add_parser("pack", help="the potion pack: prompts, frozen inputs and cells")
@@ -226,7 +231,7 @@ def _pack(args) -> int:
 
 
 def _cases(args) -> int:
-    data = import_from_core(args.core, args.ref, args.label)
+    data = import_from_core(args.core, args.ref, args.label, args.plugins_repo, args.plugins_ref, args.plugins_label)
     write_case_set(data, args.out)
     print(f"{len(data['presets'])} presets, {len(data['cases'])} cases, {len(data['recipes'])} recipes from {data['source']['ref']}")
     unresolved = [f"{case['preset_key']}/{case['name']}:{model['field']}" for case in data["cases"] for model in case["models"] if model["source"].startswith("unresolved")]
@@ -248,9 +253,11 @@ def _media(args) -> int:
 
 
 def _report(args) -> int:
+    labels = parse_machine_labels(args.machine_label)
     matrix_dirs, scenario_dirs = split_dirs(args.runs)
     run_set = load_set(matrix_dirs, args.preflight, args.probe, args.note) if matrix_dirs else None
     scenario = load_one_scenario(scenario_dirs)
+    relabeled = relabel_machines(labels, [run_set], [scenario])
     if scenario is not None and run_set is None:
         scenario.notes = list(args.note)
     if run_set is not None and args.pack and args.pack.is_file():
@@ -264,11 +271,20 @@ def _report(args) -> int:
             if run_set is None:
                 raise ReportError("--compare gives matrix runs, but the report has no matrix run")
             previous = load_set(old_matrix)
+            relabeled += relabel_machines(labels, [previous])
             comparison = compare_sets(run_set, previous)
         if old_scenarios:
             if scenario is None:
                 raise ReportError("--compare gives a scenario, but the report has no scenario")
-            scenario_comparison = compare_scenarios(scenario, load_one_scenario(old_scenarios))
+            old_scenario = load_one_scenario(old_scenarios)
+            relabeled += relabel_machines(labels, scenarios=[old_scenario])
+            scenario_comparison = compare_scenarios(scenario, old_scenario)
+    if relabeled:
+        note = f"{relabeled} of the runs on this page are shown under another machine name than the one they recorded (--machine-label)"
+        if run_set is not None:
+            run_set.notes.append(note)
+        elif scenario is not None:
+            scenario.notes.append(note)
     shown = sorted({str(name) for name in ((run_set.machine if run_set else None), (previous.machine if previous else None), (scenario.machine if scenario else None), (scenario_comparison or {}).get("previous", {}).get("machine")) if name})
     if len(shown) > 1:
         print(f"warning: the page shows the names of {len(shown)} machines: {', '.join(shown)}", file=sys.stderr)
@@ -300,11 +316,17 @@ def _cleanup(args) -> int:
 
 
 def _merge(args) -> int:
+    labels = parse_machine_labels(args.machine_label)
     matrix_dirs, scenario_dirs = split_dirs(args.runs)
     sets = [load_set(dirs) for dirs in group_by_machine(matrix_dirs).values()]
+    relabel_machines(labels, sets)
+    names = [run_set.machine for run_set in sets]
+    if len(set(names)) < len(names):
+        raise ReportError("--machine-label gives two machines the same name: merge keeps one column per machine")
     scenarios = {}
     for run_dir in scenario_dirs:
         scenario = load_scenario(run_dir)
+        relabel_machines(labels, scenarios=[scenario])
         if scenario.machine in scenarios:
             raise ReportError(f"two scenarios of {scenario.machine} ({scenarios[scenario.machine].run_id} and {scenario.run_id}): merge takes one per machine")
         scenarios[scenario.machine] = scenario

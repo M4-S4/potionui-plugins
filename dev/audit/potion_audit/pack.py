@@ -4,13 +4,15 @@ import json
 import re
 import tomllib
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from .cases import ZERO_SHA, Case, CaseFileError, CaseSet, ModelRef, load_cases
 
 PACK_SCHEMA = 1
 PROFILES = ("smoke", "full")
+PROFILE_KEYS = {"beyond_tier"}
+BEYOND_TIER_SETTINGS = ("skip", "last")
 INPUT_KINDS = ("image", "video", "audio")
 MAKE_METHODS = ("generate", "transform")
 TRANSFORM_OPS = ("rect_mask", "edges", "desaturate_video")
@@ -119,6 +121,7 @@ class Pack:
     negatives: dict
     inputs: dict
     cells: tuple[Cell, ...]
+    profile_settings: dict = field(default_factory=dict)
 
     @property
     def root(self) -> Path:
@@ -252,6 +255,7 @@ def load_pack(path: Path) -> Pack:
             position=position,
         )
     cells = tuple(_cell(raw, case_set, position, CELL_KEYS) for position, raw in enumerate(data.get("cells") or ()))
+    profile_settings = _profile_settings(data.get("profiles"))
     return Pack(
         path=path.resolve(),
         sha256=hashlib.sha256(raw_bytes).hexdigest(),
@@ -265,7 +269,37 @@ def load_pack(path: Path) -> Pack:
         negatives=dict(data.get("negatives") or {}),
         inputs=inputs,
         cells=cells,
+        profile_settings=profile_settings,
     )
+
+
+def _profile_settings(raw) -> dict:
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise PackError("[profiles] must be a table")
+    settings = {}
+    for name, entry in raw.items():
+        if name not in PROFILES:
+            raise PackError(f"[profiles.{name}] names an unknown profile; the profiles are {', '.join(PROFILES)}")
+        if not isinstance(entry, dict):
+            raise PackError(f"[profiles.{name}] must be a table")
+        unknown = sorted(set(entry) - PROFILE_KEYS)
+        if unknown:
+            raise PackError(f"[profiles.{name}] has unknown keys: {', '.join(unknown)}")
+        beyond = entry.get("beyond_tier", "skip")
+        if beyond not in BEYOND_TIER_SETTINGS:
+            raise PackError(f"[profiles.{name}] beyond_tier is {beyond!r}, expected one of {', '.join(BEYOND_TIER_SETTINGS)}")
+        settings[name] = {"beyond_tier": beyond}
+    return settings
+
+
+def beyond_tier_default(pack: Pack, profile: str) -> bool:
+    return (pack.profile_settings.get(profile) or {}).get("beyond_tier") == "last"
+
+
+def resolve_beyond_tier(pack: Pack, profile: str, asked: bool | None) -> bool:
+    return beyond_tier_default(pack, profile) if asked is None else bool(asked)
 
 
 def expand(pack: Pack, text: str) -> str:

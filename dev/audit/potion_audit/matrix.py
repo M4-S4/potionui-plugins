@@ -9,8 +9,8 @@ from .cleanup import account_identity, library_mark, refuse_cleaned
 from .client import ApiClient, ApiError, unwrap
 from .coverage import ModelResolver, assess, live_state
 from .inputs import Uploads
-from .pack import Pack, PackError, build_cell_request, cell_checks, estimate, run_order
-from .plan import cell_folder, select_cells, timing_by_preset
+from .pack import Pack, PackError, build_cell_request, cell_checks, estimate, resolve_beyond_tier, run_order
+from .plan import beyond_last, cell_folder, select_cells, timing_by_preset
 from .run import DEFAULT_TIMEOUT, RunRefused, ensure_idle, runner_info, submit_and_collect
 
 HEALTHY = {"healthy", "ok"}
@@ -53,17 +53,23 @@ def _summary(entries: list[dict]) -> dict:
     ran = [entry for entry in entries if entry.get("verdict")]
     measured = [entry["run_seconds"] for entry in ran if entry.get("run_seconds") is not None]
     estimated = [entry["estimate_seconds"] for entry in ran if entry.get("estimate_seconds") is not None]
+    beyond = {}
+    for entry in ran:
+        if entry.get("beyond_tier"):
+            beyond[entry["verdict"]] = beyond.get(entry["verdict"], 0) + 1
     return {
         "cells": len(entries),
         "run": len(ran),
         "statuses": statuses,
         "verdicts": verdicts,
+        "beyond_tier_verdicts": beyond,
         "measured_seconds": round(sum(measured), 1),
         "estimated_seconds": round(sum(estimated), 1),
     }
 
 
-def run_profile(client: ApiClient, pack: Pack, profile: str, out_root: Path, run_id: str, *, beyond_tier: bool = False, only: str | None = None, machine: str | None = None, mode: str | None = None, host_probe: Path | None = None, keep_bundle: bool = False, timeout: float | None = None, interval: float = 2.0, clock: Callable[[], float] = time.monotonic, sleep: Callable[[float], None] = time.sleep, log: Callable[[str], None] = print) -> dict:
+def run_profile(client: ApiClient, pack: Pack, profile: str, out_root: Path, run_id: str, *, beyond_tier: bool | None = None, only: str | None = None, machine: str | None = None, mode: str | None = None, host_probe: Path | None = None, keep_bundle: bool = False, timeout: float | None = None, interval: float = 2.0, clock: Callable[[], float] = time.monotonic, sleep: Callable[[float], None] = time.sleep, log: Callable[[str], None] = print) -> dict:
+    beyond_tier = resolve_beyond_tier(pack, profile, beyond_tier)
     health = instance_health(client)
     if health not in HEALTHY:
         raise RunRefused(f"the instance is not healthy: {health}")
@@ -85,6 +91,7 @@ def run_profile(client: ApiClient, pack: Pack, profile: str, out_root: Path, run
         "schema": 1,
         "run_id": run_id,
         "profile": profile,
+        "beyond_tier": "last" if beyond_tier else "skip",
         "dry_run": False,
         "started_at": datetime.now(UTC).isoformat(timespec="seconds"),
         "ended_at": None,
@@ -105,7 +112,12 @@ def run_profile(client: ApiClient, pack: Pack, profile: str, out_root: Path, run
     seen = set()
     current = None
     try:
-        for index, (cell, warm) in enumerate(run_order(select_cells(pack, profile, only), profile), start=1):
+        order = run_order(select_cells(pack, profile, only), profile)
+        if beyond_tier:
+            schedule = beyond_last([(cell, warm, assess(pack, cell, resolver, live)) for cell, warm in order], True)
+        else:
+            schedule = [(cell, warm, None) for cell, warm in order]
+        for index, (cell, warm, early) in enumerate(schedule, start=1):
             entry = {
                 "order": index,
                 "cell": cell.id,
@@ -124,11 +136,13 @@ def run_profile(client: ApiClient, pack: Pack, profile: str, out_root: Path, run
             if run["stopped"]:
                 entry.update(status="not_run", reason=run["stopped"])
                 continue
-            assessed = assess(pack, cell, resolver, live)
+            assessed = early or assess(pack, cell, resolver, live)
             status = assessed["status"]
             if status == "beyond_tier" and beyond_tier:
                 status = "ready_beyond_tier"
             entry.update(status=status, reason=assessed["reason"])
+            if status == "ready_beyond_tier":
+                entry["beyond_tier"] = True
             if status not in RUNNABLE:
                 continue
             cold = cell.preset_id not in seen
