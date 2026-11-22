@@ -141,7 +141,7 @@ def test_a_matrix_and_a_scenario_of_one_machine_and_version_share_a_page(vp_api,
     assert code == 0
     page = (tmp_path / "both" / "index.html").read_text(encoding="utf-8")
     assert page.index('<h2 id="matrix">') < page.index('<h2 id="vp">') < page.index('<h2 id="cells">') < page.index('<h2 id="vp-steps">')
-    assert '<a href="#vp">Scenario</a>' in page and '<a href="#vp-steps">Steps</a>' in page
+    assert '<a href="#vp">Scenario</a>' in page and '<a href="#vp-steps" class="nojs">Steps</a>' in page and '<section class="block nojs"><h2 id="vp-steps">' in page
     assert '<section class="group"><h3>MiniMax-H3-12GB ' in page
     assert "Restarts</div><div class=\"big\">0</div>" in page
     report = read(tmp_path / "both" / "report.json")

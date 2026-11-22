@@ -183,19 +183,28 @@ def over(color, background, alpha: float) -> tuple[float, ...]:
     return tuple(value * alpha + base * (1 - alpha) for value, base in zip(color, background))
 
 
-def test_verdict_badges_and_text_keep_aa_contrast_in_both_themes(fake_api, tmp_path, case_file):
+OKABE_ITO = {"230 159 0", "86 180 233", "0 158 115", "240 228 66", "0 114 178", "213 94 0", "204 121 167", "0 0 0"}
+
+
+def test_status_colours_are_okabe_ito_and_badges_keep_aa_contrast_in_both_themes(fake_api, tmp_path, case_file):
     for block in (report.DARK, report.LIGHT):
         found = tokens(block)
-        card, soft, tint = rgb(found["--card"]), rgb(found["--soft"]), float(found["--tint"])
-        for status in ("--ok", "--bad", "--warn"):
-            color = rgb(found[status])
-            assert contrast(color, card) >= 4.5, (block[:20], status, "badge in a tinted card")
-            assert contrast(color, over(color, card, tint)) >= 4.5, (block[:20], status, "badge on its own tint")
-            assert contrast(rgb(found["--muted"]), over(color, card, tint)) >= 4.5, (block[:20], status, "muted text in a tinted card")
+        card, soft = rgb(found["--card"]), rgb(found["--soft"])
+        for status in report.STATUS_NAMES:
+            assert found[f"--{status}"].strip() in OKABE_ITO, (block[:20], status)
+            fill, label = rgb(found[f"--{status}"]), rgb(found[f"--on-{status}"])
+            assert contrast(label, fill) >= 4.5, (block[:20], status, "label on its badge")
+            edge = over(rgb(found["--edge"]), card, 0.55)
+            assert contrast(edge, card) >= 3, (block[:20], status, "edge of the badge")
         for text in ("--fg", "--muted", "--subtle", "--signal"):
             assert contrast(rgb(found[text]), card) >= 4.5, (block[:20], text)
         assert contrast(rgb(found["--muted"]), soft) >= 4.5
-    assert ".cell .tag { background: rgb(var(--card)); }" in report.STYLE
+        assert found["--signal"].strip() in OKABE_ITO
+    for status in report.STATUS_NAMES:
+        assert f".tag.{status}::before {{ content:" in report.STYLE
+        assert f".tag.{status} {{ color: rgb(var(--on-{status})); background: rgb(var(--{status}));" in report.STYLE
+    assert len({report.GLYPHS[name] for name in report.STATUS_NAMES}) == len(report.STATUS_NAMES)
+    assert not re.search(r"(?<![-\w])color: rgb\(var\(--(?:ok|bad|oom|slow|warn|beyond|info)\)", report.STYLE)
     _, page = probed_report(fake_api, tmp_path, case_file, "spy", [host_probe()])
     assert "IntersectionObserver" in page and "addEventListener('scroll'" not in page
 
@@ -233,3 +242,56 @@ def test_a_fix_a_regression_and_a_step_run_for_the_first_time_are_told_apart():
     ]
     found = changes(rows)
     assert [len(found[name]) for name in ("fixed", "regressed", "newly run", "no longer run")] == [1, 1, 1, 1]
+
+
+def compared_pages(fake_api, tmp_path, case_file):
+    pack = load_pack(write_pack(tmp_path, case_file))
+    play(fake_api, pack, tmp_path / "out", "old", machine="box", beyond_tier=True)
+    run = read(tmp_path / "out" / "old" / "run.json")
+    run["cells"][0]["verdict"] = "FAIL"
+    write(tmp_path / "out" / "old" / "run.json", run)
+    play(fake_api, pack, tmp_path / "out", "new", machine="box", beyond_tier=True)
+    current = load_set([tmp_path / "out" / "new"])
+    previous = load_set([tmp_path / "out" / "old"])
+    comparison = compare_sets(current, previous)
+    return write_report(current, tmp_path / "report", comparison, media=False, log=quiet, previous=previous).read_text(encoding="utf-8")
+
+
+def test_a_card_opens_its_detail_beside_the_matrix_with_keys_filters_and_a_link(fake_api, tmp_path, case_file):
+    page = compared_pages(fake_api, tmp_path, case_file)
+    assert '<aside class="panel" id="panel"' in page and page.index("</div><aside") < page.index("</body>")
+    for node in ("panel-prev", "panel-next", "panel-close", "panel-link", "panel-content"):
+        assert f'id="{node}"' in page
+    cards = re.findall(r'<a class="cell (\w+)" href="#([^"]+)"[^>]*data-target="([^"]+)" data-status="(\w+)" data-preset="([^"]+)" data-ran="(\d)" data-beyond="(\d)" data-changed="(\d)"', page)
+    assert len(cards) == 2
+    for klass, href, target, status, preset, ran, beyond, changed in cards:
+        assert href == target and klass == status
+        assert f'<details class="detail" id="{target}">' in page
+    by_target = {card[1]: card for card in cards}
+    assert by_target["c-core_SDXL_txt2img"][7] == "1" and by_target["c-core_Wan_video"][6] == "1"
+    assert '<div class="filters js-only"' in page
+    for value in ("all", "ok", "beyond", "changed"):
+        assert f'data-value="{value}"' in page
+    assert '<option value="core/SDXL">core/SDXL</option>' in page
+    assert "'ArrowRight'" in page and "'Escape'" in page and "history.replaceState" in page
+    assert '<section class="block nojs"><h2 id="cells">' in page and '<a href="#cells" class="nojs">' in page
+
+
+def test_the_detail_of_a_cell_holds_its_comparison_with_the_previous_audit(fake_api, tmp_path, case_file):
+    page = compared_pages(fake_api, tmp_path, case_file)
+    detail = page[page.index('<details class="detail" id="c-core_SDXL_txt2img">'):]
+    detail = detail[:detail.index("</details>")]
+    assert '<div class="previous"><h3>Against old</h3>' in detail
+    assert '<span class="tag bad">FAIL</span> → <span class="tag ok">PASS</span> <strong>changed</strong>' in detail
+    assert "Run time" in detail and "Peak VRAM" in detail and "SSIM" in detail
+    card = page[page.index('<a class="cell ok" href="#c-core_SDXL_txt2img"'):]
+    assert '<span class="tag info">was FAIL</span>' in card[:card.index("</a>")]
+
+
+def test_a_cell_played_beyond_the_tier_says_so_beside_its_verdict(fake_api, tmp_path, case_file):
+    page = compared_pages(fake_api, tmp_path, case_file)
+    card = page[page.index('href="#c-core_Wan_video"'):]
+    assert '<span class="tag beyond">beyond tier</span>' in card[:card.index("</a>")]
+    detail = page[page.index('<details class="detail" id="c-core_Wan_video">'):]
+    assert "Above the memory tier of the GPU: played after every cell within the tier" in detail[:detail.index("</details>")]
+    assert 'played last</p>' in page and '<div class="bar" role="img" aria-label="PASS 2"' in page
