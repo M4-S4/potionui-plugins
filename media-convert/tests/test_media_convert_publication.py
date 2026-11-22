@@ -1,3 +1,4 @@
+import dataclasses
 import inspect
 import shutil
 import threading
@@ -353,6 +354,27 @@ def test_a_lightened_video_is_a_new_mp4_item_under_its_target(library, source_di
     assert made.original_filename == "Holiday.mp4" and made.mime_type == "video/mp4"
     assert library.file(made).stat().st_size < 8 * 1000 * 1000
     assert library.thumbnails(made)
+
+
+def core_records_sound():
+    return "has_audio" in {field.name for field in dataclasses.fields(Upload)}
+
+
+def test_the_library_records_whether_each_result_has_sound(library, source_dir):
+    need_encoders("libx264", "aac", "libmp3lame")
+    if not core_records_sound():
+        pytest.skip("this core does not record the sound of a Library item")
+    item = library.add(make_video(source_dir / "a.mkv", seconds=2.0, size=(64, 48)), "Holiday.mkv", "video")
+
+    silent = library.run("media-convert.lighten", {"target": 8, "keep_sound": False}, item)
+    voiced = library.run("media-convert.lighten", {"target": 8}, item)
+    sound = library.run("media-convert.extract-audio", {"format": "mp3"}, item)
+
+    for result in (silent, voiced, sound):
+        assert result.ok, result.error
+    stored = [library.repo.get_by_id(result.items[0].id, USER).has_audio for result in (silent, voiced, sound)]
+    assert stored == [False, True, True]
+    assert [result.items[0].has_audio for result in (silent, voiced, sound)] == stored
 
 
 def test_h265_switched_off_is_refused_when_the_run_is_planned(library, source_dir, monkeypatch):
