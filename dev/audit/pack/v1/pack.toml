@@ -1,11 +1,14 @@
 schema = 1
 id = "potion-v1"
-version = "1.2.0"
+version = "1.3.0"
 seed = 12345
 
 [cases]
-file = "../../cases/54c51e21d.json"
-sha256 = "f4adf3ee856698b8f9727cf3beb02a119c2bf1a0783621aa6ff3f122b8a3d2eb"
+file = "../../cases/c2c9e8895.json"
+sha256 = "66a16d0ef04c887cdc330d41432f4b0adab9195cb50519615498827015a2aac3"
+
+[profiles.full]
+beyond_tier = "last"
 
 [bible]
 bottle = "a small round glass potion bottle with a long neck, sealed with a cork stopper, filled with a glowing violet liquid, a cream paper label hand-lettered with the word \"PotionUI\", standing on an old oak workbench"
@@ -643,6 +646,31 @@ prompt = "ingredients"
 profiles = ["full"]
 bind = {"pictures[0]" = "lumi", "pictures[1]" = "object"}
 sources = {pictures = "pack: the form asks for one clean subject per picture on a plain background; object is the bottle alone on a grey studio background, lumi the character"}
+
+[[cells]]
+preset = "core/LTX-2.5"
+mode = "txt2video"
+case = "ltx25-txt2video-fast"
+prompt = "t2v"
+profiles = ["full"]
+
+[[cells]]
+preset = "core/LTX-2.5"
+mode = "img2video"
+case = "ltx25-img2video-fast"
+fix = "the case gives no start picture, which the mode requires: start_image is bound to bottle"
+prompt = "i2v"
+profiles = ["full"]
+bind = {start_image = "bottle"}
+
+[[cells]]
+preset = "core/LTX-2.5"
+mode = "first_last"
+case = "ltx25-first-last-fast"
+fix = "the case gives neither of the two pictures the mode requires: start_image is bound to bottle and end_image to bottle-gold"
+prompt = "flf"
+profiles = ["full"]
+bind = {start_image = "bottle", end_image = "bottle-gold"}
 
 [[cells]]
 preset = "core/LTX-2.5"

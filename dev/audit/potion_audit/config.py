@@ -6,7 +6,7 @@ from pathlib import Path
 
 MODES = ("dedicated", "shared")
 PROBE_SOURCES = ("local", "file", "none")
-DEFAULT_CASES = Path(__file__).resolve().parent.parent / "cases" / "54c51e21d.json"
+DEFAULT_CASES = Path(__file__).resolve().parent.parent / "cases" / "c2c9e8895.json"
 
 
 class ConfigError(ValueError):

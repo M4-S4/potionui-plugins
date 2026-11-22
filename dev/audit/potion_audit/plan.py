@@ -6,7 +6,7 @@ from pathlib import Path
 
 from .client import ApiClient, unwrap
 from .coverage import ModelResolver, assess, live_state
-from .pack import Pack, PackError, build_cell_request, dry_media, estimate, included, run_order
+from .pack import Pack, PackError, build_cell_request, dry_media, estimate, included, resolve_beyond_tier, run_order
 from .run import ensure_idle, runner_info
 
 RUNNABLE = {"ready", "input_pending"}
@@ -30,7 +30,16 @@ def select_cells(pack: Pack, profile: str, only: str | None):
     return cells
 
 
-def dry_run(client: ApiClient, pack: Pack, profile: str, out_root: Path, run_id: str, *, beyond_tier: bool = False, only: str | None = None, log: Callable[[str], None] = print) -> dict:
+def beyond_last(schedule: list[tuple], beyond_tier: bool) -> list[tuple]:
+    if not beyond_tier:
+        return schedule
+    within = [item for item in schedule if item[2]["status"] != "beyond_tier"]
+    beyond = [item for item in schedule if item[2]["status"] == "beyond_tier"]
+    return within + beyond
+
+
+def dry_run(client: ApiClient, pack: Pack, profile: str, out_root: Path, run_id: str, *, beyond_tier: bool | None = None, only: str | None = None, log: Callable[[str], None] = print) -> dict:
+    beyond_tier = resolve_beyond_tier(pack, profile, beyond_tier)
     ensure_idle(client)
     live = live_state(client)
     resolver = ModelResolver(client)
@@ -39,8 +48,8 @@ def dry_run(client: ApiClient, pack: Pack, profile: str, out_root: Path, run_id:
     run_dir = out_root / run_id
     entries = []
     seen_presets = set()
-    for index, (cell, warm) in enumerate(run_order(cells, profile), start=1):
-        assessed = assess(pack, cell, resolver, live)
+    schedule = beyond_last([(cell, warm, assess(pack, cell, resolver, live)) for cell, warm in run_order(cells, profile)], beyond_tier)
+    for index, (cell, warm, assessed) in enumerate(schedule, start=1):
         status = assessed["status"]
         if status == "beyond_tier" and beyond_tier:
             status = "ready_beyond_tier"
@@ -88,6 +97,7 @@ def dry_run(client: ApiClient, pack: Pack, profile: str, out_root: Path, run_id:
         "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
         "run_id": run_id,
         "profile": profile,
+        "beyond_tier": "last" if beyond_tier else "skip",
         "dry_run": True,
         "pack": {"id": pack.id, "version": pack.version, "file": pack.path.name, "sha256": pack.sha256},
         "cases": {"file": pack.case_set.path.name, "sha256": pack.case_set.sha256},
@@ -98,6 +108,8 @@ def dry_run(client: ApiClient, pack: Pack, profile: str, out_root: Path, run_id:
             "statuses": counts,
             "estimated_seconds": round(sum(known), 1),
             "planned_without_estimate": len(planned) - len(known),
+            "beyond_tier_planned": sum(1 for entry in planned if entry["status"] == "ready_beyond_tier"),
+            "beyond_tier_estimated_seconds": round(sum(entry["estimate_seconds"] for entry in planned if entry["status"] == "ready_beyond_tier" and entry["estimate_seconds"] is not None), 1),
         },
         "cells": entries,
     }
@@ -110,5 +122,7 @@ def dry_run(client: ApiClient, pack: Pack, profile: str, out_root: Path, run_id:
         log(f"{entry['order']:3d}  {entry['cell']}{warm}  {entry['status']}  {seconds}{reason}")
     summary = plan["summary"]
     log(f"{summary['planned']} of {summary['cells']} cells planned, {summary['estimated_seconds'] / 60:.1f} min estimated, {summary['planned_without_estimate']} without an estimate")
+    if summary["beyond_tier_planned"]:
+        log(f"{summary['beyond_tier_planned']} cells above the memory tier of the GPU, played last, {summary['beyond_tier_estimated_seconds'] / 60:.1f} min estimated")
     log(f"plan: {run_dir / 'plan.json'}")
     return plan

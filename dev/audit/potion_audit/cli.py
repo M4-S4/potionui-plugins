@@ -42,7 +42,7 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("--only", help="<preset>:<mode> of the case file, or with --pack a cell id or a preset of the pack")
     run.add_argument("--pack", type=Path, nargs="?", const=DEFAULT_PACK, help="the cells of a pack profile: planned with --dry-run, run with --confirm-gpu")
     run.add_argument("--profile", choices=PROFILES, default="smoke")
-    run.add_argument("--beyond-tier", action="store_true", help="plan the presets whose min_vram_gb is above the GPU")
+    run.add_argument("--beyond-tier", action=argparse.BooleanOptionalAction, default=None, help="play the cells whose tier is above the GPU, after all the others; by default as the profile of the pack says ([profiles.<name>] beyond_tier)")
     run.add_argument("--prompt", help="positive prompt in place of the case's own")
     run.add_argument("--timeout", type=float, help="seconds before the generation is cancelled")
     run.add_argument("--interval", type=float, default=2.0, help="seconds between two status polls")
@@ -81,6 +81,9 @@ def _parser() -> argparse.ArgumentParser:
     importer.add_argument("--core", type=Path, required=True, help="a git checkout of the core")
     importer.add_argument("--ref", required=True, help="commit to read, without checking it out")
     importer.add_argument("--label", default="core")
+    importer.add_argument("--plugins-repo", type=Path, help="a git checkout of a plugins repository, whose <plugin>/presets replace those of the core")
+    importer.add_argument("--plugins-ref", help="commit of the plugins repository to read")
+    importer.add_argument("--plugins-label", default="plugins")
     importer.add_argument("--out", type=Path, required=True)
 
     pack = commands.add_parser("pack", help="the potion pack: prompts, frozen inputs and cells")
@@ -226,7 +229,7 @@ def _pack(args) -> int:
 
 
 def _cases(args) -> int:
-    data = import_from_core(args.core, args.ref, args.label)
+    data = import_from_core(args.core, args.ref, args.label, args.plugins_repo, args.plugins_ref, args.plugins_label)
     write_case_set(data, args.out)
     print(f"{len(data['presets'])} presets, {len(data['cases'])} cases, {len(data['recipes'])} recipes from {data['source']['ref']}")
     unresolved = [f"{case['preset_key']}/{case['name']}:{model['field']}" for case in data["cases"] for model in case["models"] if model["source"].startswith("unresolved")]
